@@ -31,7 +31,7 @@ end
 """
     bound!(tree::BnBTree, current_node_id::Int)
 
-Close all nodes which have a lower bound higher or equal to the incumbent
+Close all nodes which have a lower bound higher or equal to the incumbent.
 """
 function bound!(tree::BnBTree, current_node_id::Int)
     for (_, node) in tree.nodes
@@ -51,19 +51,96 @@ function close_node!(tree::BnBTree, node::AbstractNode)
     return delete!(tree.node_queue, node.id)
 end
 
-"""
-    branch!(tree, node)
-
-Get the branching variable with [`get_branching_variable`](@ref) and then calls [`get_branching_nodes_info`](@ref) and [`add_node!`](@ref).
-"""
+# ---- branch! dispatch (only this bit changes) ----
 function branch!(tree, node)
+    orbits_fn = get(tree.root.options, :orbital_orbits, nothing)
+    if orbits_fn !== nothing
+        return branch_orbital!(tree, node, orbits_fn)
+    end
+
     variable_idx = get_branching_variable(tree, tree.options.branch_strategy, node)
-    # no branching variable selected => return
     variable_idx == -1 && return
     nodes_info = get_branching_nodes_info(tree, node, variable_idx)
     for node_info in nodes_info
         add_node!(tree, node, node_info)
     end
+end
+
+
+
+# ---- filter an active set by a set of (lower, upper) fixings ----
+function filter_active_set_by_bounds(active_set, tree, lower, upper)
+    atol = tree.options.atol
+    AS = typeof(active_set)
+
+    kept = Tuple{Float64,eltype(active_set.atoms)}[]
+    for (λ, v) in active_set
+        ok = true
+        for (i, lo) in lower
+            if v[i] < lo - atol; ok = false; break; end
+        end
+        if ok
+            for (i, hi) in upper
+                if v[i] > hi + atol; ok = false; break; end
+            end
+        end
+        ok && push!(kept, (λ, v))
+    end
+
+    isempty(kept) && return nothing
+    total = sum(first, kept)
+    return AS([(w / total, v) for (w, v) in kept])
+end
+
+"""
+    apply_orbital_fixing!(varbounds, n_vertices::Int)
+
+Orbital fixing (Theorem 3, Ostrowski et al., Math. Prog. 2009).
+
+Given a child's `varbounds` and the number of graph vertices, computes the
+orbital partition of the group `G(A(F_1, ∅))` — i.e. only edges fixed to 1
+are treated as fixed, all other edges (including those fixed to 0) are
+considered unassigned. For each orbit that contains a member with
+`upper_bound == 0` in the actual child, all remaining members of that orbit
+are fixed to zero.
+
+Mutates `varbounds` in place and returns the set `S` of newly-fixed indices.
+"""
+function apply_orbital_fixing!(varbounds::IntegerBounds, n_vertices::Int)
+    n_edges = n_vertices * (n_vertices - 1) ÷ 2
+
+    lb = zeros(Int, n_edges)
+    ub = ones(Int,  n_edges)
+    for (i, v) in varbounds.lower_bounds
+        lb[i] = Int(round(v))
+    end
+    for (i, v) in varbounds.upper_bounds
+        ub[i] = Int(round(v))
+    end
+
+    # Orbits of G(A(F_1, ∅)): pretend F_0 is empty for the symmetry computation.
+    ones_ub = ones(Int, n_edges)
+    orbits  = compute_unassigned_orbits(n_vertices, lb, ones_ub)
+
+    S = Int[]
+    for orbit in orbits
+        if any(e -> ub[e] == 0, orbit)          # orbit intersects F_0
+            for e in orbit
+                if ub[e] != 0                    # e is still free in this child
+                    push!(S, e)
+                end
+            end
+        end
+    end
+
+    for e in S
+        if haskey(varbounds.lower_bounds, e)
+            delete!(varbounds.lower_bounds, e)
+        end
+        varbounds.upper_bounds[e] = 0.0
+    end
+
+    return S
 end
 
 """
@@ -595,4 +672,175 @@ function evaluate_node!(tree::BnBTree, node::FrankWolfeNode)
     node.discarded_set_size = length(node.discarded_vertices)
 
     return lower_bound, NaN
+end
+
+# ---- orbital branching driver ----
+function branch_orbital!(tree::BnBTree, node::FrankWolfeNode, orbits_fn)
+    orbits = orbits_fn(tree, node)
+    isempty(orbits) && return
+
+    variable_idx = get_branching_variable(tree, tree.options.branch_strategy, node)
+    variable_idx == -1 && return
+
+    O = nothing
+    for orbit in orbits
+        if variable_idx in orbit
+            O = orbit
+            break
+        end
+    end
+    O === nothing && return
+
+    rep = first(O)
+    nodes_info = get_orbital_branching_nodes_info(tree, node, rep, O)
+    for info in nodes_info
+        add_node!(tree, node, info)
+    end
+    return
+end
+
+# ---- two orbital children ----
+function get_orbital_branching_nodes_info(
+    tree::BnBTree, node::FrankWolfeNode, rep::Int, orbit::Vector{Int},
+)
+    is_valid_split(tree, rep) ||
+        error("Orbital branching: representative $rep was already branched on!")
+
+    x = get_relaxed_values(tree, node)
+    primal = tree.root.problem.f(x)
+    lower_bound_base = primal - node.dual_gap
+    @assert isfinite(lower_bound_base)
+
+    # ---- bound fixings ----
+    left_lower  = Dict(rep => 1.0)
+    left_upper  = Dict{Int,Float64}()
+    right_lower = Dict{Int,Float64}()
+    right_upper = Dict(i => 0.0 for i in orbit)
+
+    # ---- pseudocost bookkeeping ----
+    left_distance  = x[rep] - floor(x[rep])
+    right_distance = minimum(x[i] for i in orbit)
+
+    # ---- user branch callback ----
+    user_prune_left, user_prune_right = false, false
+    if tree.root.options[:branch_callback] !== nothing
+        user_prune_left, user_prune_right =
+            tree.root.options[:branch_callback](tree, node, rep)
+    end
+
+    # ---- variant-dependent active set handling ----
+    is_di = typeof(tree.root.options[:variant]) <: DecompositionInvariant
+
+    if is_di
+        # DI: do not split the active set; do not touch pre_computed_set either.
+        # The FW loop will re-project using the child's local_bounds.
+        active_set_left  = node.active_set
+        active_set_right = node.active_set
+        pre_left  = node.pre_computed_set
+        pre_right = node.pre_computed_set
+    else
+        active_set_left  = filter_active_set_by_bounds(
+            node.active_set, tree, left_lower, left_upper)
+        active_set_right = filter_active_set_by_bounds(
+            node.active_set, tree, right_lower, right_upper)
+
+        # Empty filter -> fall back to the parent's active set; the child LMO
+        # will only accept vertices that satisfy the new local bounds, so the
+        # FW loop will simply discard infeasible ones on the first LMO call.
+        active_set_left  === nothing && (active_set_left  = node.active_set)
+        active_set_right === nothing && (active_set_right = node.active_set)
+
+        pre_left  = node.pre_computed_set
+        pre_right = node.pre_computed_set
+    end
+
+    # ---- local bounds ----
+    varbounds_left  = copy(node.local_bounds)
+    varbounds_right = copy(node.local_bounds)
+    for (k, v) in left_lower
+        haskey(varbounds_left.upper_bounds, k) && delete!(varbounds_left.upper_bounds, k)
+        push!(varbounds_left.lower_bounds, (k => v))
+    end
+    for (k, v) in left_upper
+        haskey(varbounds_left.lower_bounds, k) && delete!(varbounds_left.lower_bounds, k)
+        push!(varbounds_left.upper_bounds, (k => v))
+    end
+    for (k, v) in right_lower
+        haskey(varbounds_right.upper_bounds, k) && delete!(varbounds_right.upper_bounds, k)
+        push!(varbounds_right.lower_bounds, (k => v))
+    end
+    for (k, v) in right_upper
+        haskey(varbounds_right.lower_bounds, k) && delete!(varbounds_right.lower_bounds, k)
+        push!(varbounds_right.upper_bounds, (k => v))
+    end
+    # ---- orbital fixing (Theorem 3) ----
+    n_vertices = get(tree.root.options, :orbital_n_vertices, nothing)
+    if n_vertices !== nothing
+        S_left  = apply_orbital_fixing!(varbounds_left,  n_vertices)
+        S_right = apply_orbital_fixing!(varbounds_right, n_vertices)
+        isempty(S_left)  || @debug "Orbital fixing (left)  fixed $(length(S_left)) vars:  $S_left"
+        isempty(S_right) || @debug "Orbital fixing (right) fixed $(length(S_right)) vars: $S_right"
+    end
+
+    fw_dual_gap_limit = max(
+        tree.root.options[:dual_gap_decay_factor] * node.fw_dual_gap_limit,
+        tree.root.options[:min_node_fw_epsilon],
+    )
+
+    # ---- node info ----
+    info_left = (
+        active_set=active_set_left,
+        discarded_vertices=node.discarded_vertices,
+        local_bounds=varbounds_left,
+        fw_dual_gap_limit=fw_dual_gap_limit,
+        fw_time=Millisecond(0),
+        global_tightenings=0,
+        local_tightenings=0,
+        local_potential_tightenings=0,
+        dual_gap=NaN,
+        pre_computed_set=pre_left,
+        parent_lower_bound_base=lower_bound_base,
+        branched_on=rep,
+        branched_right=true,
+        distance_to_int=left_distance,
+        active_set_size=0,
+        discarded_set_size=0,
+    )
+    info_right = (
+        active_set=active_set_right,
+        discarded_vertices=node.discarded_vertices,
+        local_bounds=varbounds_right,
+        fw_dual_gap_limit=fw_dual_gap_limit,
+        fw_time=Millisecond(0),
+        global_tightenings=0,
+        local_tightenings=0,
+        local_potential_tightenings=0,
+        dual_gap=NaN,
+        pre_computed_set=pre_right,
+        parent_lower_bound_base=lower_bound_base,
+        branched_on=rep,
+        branched_right=false,
+        distance_to_int=right_distance,
+        active_set_size=0,
+        discarded_set_size=0,
+    )
+
+    domain_left  = !isempty(active_set_left)
+    domain_right = !isempty(active_set_right)
+
+    return if domain_left && domain_right &&
+              !user_prune_left && !user_prune_right
+        [info_left, info_right]
+    elseif user_prune_left
+        [info_right]
+    elseif user_prune_right
+        [info_left]
+    elseif domain_left
+        [info_left]
+    elseif domain_right
+        [info_right]
+    else
+        @warn "No orbital children could be created."
+        Vector{typeof(info_left)}()
+    end
 end
