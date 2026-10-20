@@ -88,7 +88,8 @@ function build_birkhoff_lmo()
         # 0 ≤ θ_i - Y_i ≤ 1 - X_i
         MOI.add_constraint.(o, 1.0 * theta[i] .- Y[i] .+ X[i], MOI.LessThan(1.0))
     end
-    MOI.add_constraint(o, sum(theta, init=0.0), MOI.EqualTo(1.0))
+    sum_t = MOI.ScalarAffineFunction([MOI.ScalarAffineTerm(1.0, ti) for ti in theta], 0.0)
+    MOI.add_constraint(o, sum_t, MOI.EqualTo(1.0))
     return Boscia.MathOptBLMO(o)
 end
 
