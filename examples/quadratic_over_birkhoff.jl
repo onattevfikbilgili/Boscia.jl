@@ -66,6 +66,28 @@ function build_birkhoff_mip(n)
     return FrankWolfe.MathOptLMO(o)
 end
 
+function build_birkhoff_mip(n)
+    o = SCIP.Optimizer()
+    MOI.set(o, MOI.Silent(), true)
+    X = reshape(MOI.add_variables(o, n^2), n, n)
+    # Binary decision variables
+    for x in X
+        MOI.add_constraint(o, x, MOI.ZeroOne())
+    end
+    # Doubly stochastic constraints:
+    for i in 1:n
+        terms = [MOI.ScalarAffineTerm(1.0, X[i, j]) for j in 1:n]
+        row_sum = MOI.ScalarAffineFunction(terms, 0.0)
+        MOI.add_constraint(o, row_sum, MOI.EqualTo(1.0))
+    end
+    for j in 1:n
+        terms = [MOI.ScalarAffineTerm(1.0, X[i, j]) for i in 1:n]
+        col_sum = MOI.ScalarAffineFunction(terms, 0.0)
+        MOI.add_constraint(o, col_sum, MOI.EqualTo(1.0))
+    end
+    return FrankWolfe.MathOptLMO(o)
+end
+
 @testset "Birkhoff" begin
     f, grad! = build_objective(n)
 
