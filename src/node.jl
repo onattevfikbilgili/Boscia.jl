@@ -453,8 +453,8 @@ function get_node_objective_gradient(tree::BnBTree, node::FrankWolfeNode)
     #get variable bound information
     problem = tree.root.problem
     int_vars = problem.integer_variables
-    lb = zeros(Int, n_edges)
-    ub = ones(Int,  n_edges)
+    lb = zeros(Int, size(int_vars))
+    ub = ones(Int,  size(int_vars))
     for (i, v) in node.local_bounds.lower_bounds
         lb[i] = Int(round(v))
     end
