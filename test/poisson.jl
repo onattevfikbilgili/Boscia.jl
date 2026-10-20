@@ -240,7 +240,7 @@ push!(groups, ((k-1)*group_size+1):pg)
     MOI.add_constraint(o, b, MOI.LessThan(Ng))
     MOI.add_constraint(o, b, MOI.GreaterThan(-Ng))
     for i in 1:k
-        MOI.add_constraint(o, MOI.ScalarAffineFunction(MOI.ScalarAffineTerm.(ones(group_size),x[groups[i]]), 0.0), MOI.GreaterThan(1.0))
+        MOI.add_constraint(o, MOI.ScalarAffineFunction(MOI.ScalarAffineTerm.(ones(group_size),z[groups[i]]), 0.0), MOI.GreaterThan(1.0))
     end
     lmo = FrankWolfe.MathOptLMO(o)
 
@@ -315,7 +315,7 @@ end
     MOI.add_constraint(o, b, MOI.LessThan(Ng))
     MOI.add_constraint(o, b, MOI.GreaterThan(-Ng))
     for i in 1:k
-        MOI.add_constraint(o, MOI.ScalarAffineFunction(MOI.ScalarAffineTerm.(ones(group_size),x[groups[i]]), 0.0), MOI.GreaterThan(1.0))
+        MOI.add_constraint(o, MOI.ScalarAffineFunction(MOI.ScalarAffineTerm.(ones(group_size),z[groups[i]]), 0.0), MOI.GreaterThan(1.0))
     end
     lmo = FrankWolfe.MathOptLMO(o)
     α = 1.3
