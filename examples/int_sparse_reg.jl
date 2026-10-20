@@ -64,7 +64,8 @@ const y_d = D * sol_x
 
         MOI.add_constraint(o, 1.0 * x[i] - 1.0 * l * z[i], MOI.LessThan(0.0))
     end
-    MOI.add_constraint(o, sum(z, init=0.0), MOI.LessThan(1.0 * k))
+    sum_z = MOI.ScalarAffineFunction([MOI.ScalarAffineTerm(1.0, zi) for zi in z], 0.0)
+    MOI.add_constraint(o, sum_z, MOI.LessThan(1.0 * k))
     # MOI.add_constraint(o, MOI.ScalarAffineFunction(MOI.ScalarAffineTerm.(zeros(n),x), sum(Float64.(iszero.(x)))), MOI.GreaterThan(1.0*(n-k)))
     # MOI.add_constraint(o, MOI.ScalarAffineFunction(MOI.ScalarAffineTerm.(ones(n),z), 0.0), MOI.GreaterThan(1.0*k))
     blmo = Boscia.MathOptBLMO(o)
