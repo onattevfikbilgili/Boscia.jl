@@ -29,7 +29,7 @@ const MOI = MathOptInterface
 
     settings = Boscia.create_default_settings()
     settings.branch_and_bound[:verbose] = false
-    x, _, result1 = Boscia.solve(f, grad!, lmo, settings=settings)
+    x1, _, result1 = Boscia.solve(f, grad!, lmo, settings=settings)
 
     #build the same objective and gradient, but node dependent
     function my_objective_gradient_builder(integer_variables,lower_bounds,upper_bounds)
@@ -64,7 +64,7 @@ const MOI = MathOptInterface
         return my_objective, my_gradient!
     end
 
-    settings.frank_wolfe[:objective_gradient_builder] = my_objective_gradient_buider
-    x, _, result2 = Boscia.solve(f, grad!, lmo, settings=settings)
-    @test result1 == result2
+    settings.frank_wolfe[:objective_gradient_builder] = my_objective_gradient_builder
+    x2, _, result2 = Boscia.solve(f, grad!, lmo, settings=settings)
+    @test f(x1) == f(x2)
 end
