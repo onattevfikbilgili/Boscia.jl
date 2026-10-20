@@ -314,7 +314,7 @@ Ns = 0.1
         MOI.add_constraint(o, gg, MOI.Indicator{MOI.ACTIVATE_ON_ONE}(MOI.LessThan(-Ns)))
     end
 
-    sum_z = MOI.ScalarAffineFunction([MOI.ScalarAffineTerm(1.0, zi) for zi in z],0.0)
+    sum_z = MOI.ScalarAffineFunction([MOI.ScalarAffineTerm(1.0, zi) for zi in z], 0.0)
     MOI.add_constraint(o, sum_z, MOI.LessThan(1.0 * k))
     MOI.add_constraint(o, sum_z, MOI.GreaterThan(1.0))
     MOI.add_constraint(o, b, MOI.LessThan(Ns))

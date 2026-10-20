@@ -454,14 +454,14 @@ function get_node_objective_gradient(tree::BnBTree, node::FrankWolfeNode)
     problem = tree.root.problem
     int_vars = problem.integer_variables
     lb = zeros(Int, size(int_vars))
-    ub = ones(Int,  size(int_vars))
+    ub = ones(Int, size(int_vars))
     for (i, v) in node.local_bounds.lower_bounds
         lb[i] = Int(round(v))
     end
     for (i, v) in node.local_bounds.upper_bounds
         ub[i] = Int(round(v))
     end
-    
+
     return builder(int_vars, lb, ub)
 end
 
@@ -541,7 +541,7 @@ function evaluate_node!(tree::BnBTree, node::FrankWolfeNode)
     domain_oracle = tree.root.options[:domain_oracle]
 
     #construct node bounds specific objective function and its gradient 
-    node_objective, node_gradient = get_node_objective_gradient(tree,node)
+    node_objective, node_gradient = get_node_objective_gradient(tree, node)
 
     x, primal, dual_gap, fw_status, atoms_set = solve_frank_wolfe(
         tree.root.options[:variant],

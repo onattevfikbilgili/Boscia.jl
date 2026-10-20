@@ -9,7 +9,7 @@ const MOI = MathOptInterface
 
 @testset "bound dependent objectives" begin
     n = 6
-    const diffw = 0.5 * ones(n)
+    diffw = 0.5 * ones(n)
     o = SCIP.Optimizer()
     MOI.set(o, MOI.Silent(), true)
     x = MOI.add_variables(o, n)
@@ -21,10 +21,10 @@ const MOI = MathOptInterface
     lmo = FrankWolfe.MathOptLMO(o)
 
     function f(x)
-        return sum(0.5*(x.-diffw).^2)
+        return sum(0.5 * (x .- diffw) .^ 2)
     end
     function grad!(storage, x)
-        @. storage = x-diffw
+        @. storage = x - diffw
     end
 
     settings = Boscia.create_default_settings()
@@ -32,7 +32,7 @@ const MOI = MathOptInterface
     x1, _, result1 = Boscia.solve(f, grad!, lmo, settings=settings)
 
     #build the same objective and gradient, but node dependent
-    function my_objective_gradient_builder(integer_variables,lower_bounds,upper_bounds)
+    function my_objective_gradient_builder(integer_variables, lower_bounds, upper_bounds)
         unfixed_variables = Int[]
         num_fixed = 0
 
