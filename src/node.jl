@@ -438,6 +438,34 @@ function get_branching_nodes_info(tree::BnBTree, node::FrankWolfeNode, vidx::Int
 end
 
 """
+Helper function for evaluate_node that calls the objective gradient builder specified by the user.
+"""
+function get_node_objective_gradient(tree::BnBTree, node::FrankWolfeNode)
+    options = tree.root.options
+    builder = options[:objective_gradient_builder]
+
+    # If not specified same objective and gradient as root
+    if builder === nothing
+        problem = tree.root.problem
+        return problem.f, problem.g
+    end
+
+    #get variable bound information
+    problem = tree.root.problem
+    int_vars = problem.integer_variables
+    lb = zeros(Int, n_edges)
+    ub = ones(Int,  n_edges)
+    for (i, v) in node.local_bounds.lower_bounds
+        lb[i] = Int(round(v))
+    end
+    for (i, v) in node.local_bounds.upper_bounds
+        ub[i] = Int(round(v))
+    end
+    
+    return builder(int_vars, lb, ub)
+end
+
+"""
 Computes the relaxation at that node
 """
 function evaluate_node!(tree::BnBTree, node::FrankWolfeNode)
@@ -512,10 +540,13 @@ function evaluate_node!(tree::BnBTree, node::FrankWolfeNode)
     time_ref = Dates.now()
     domain_oracle = tree.root.options[:domain_oracle]
 
+    #construct node bounds specific objective function and its gradient 
+    node_objective, node_gradient = get_node_objective_gradient(tree,node)
+
     x, primal, dual_gap, fw_status, atoms_set = solve_frank_wolfe(
         tree.root.options[:variant],
-        tree.root.problem.f,
-        tree.root.problem.g,
+        node_objective,
+        node_gradient,
         tree.root.problem.tlmo,
         node.active_set;
         epsilon=node.fw_dual_gap_limit,
