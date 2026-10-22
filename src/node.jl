@@ -589,10 +589,20 @@ function evaluate_node!(tree::BnBTree, node::FrankWolfeNode)
     time_ref = Dates.now()
     domain_oracle = tree.root.options[:domain_oracle]
 
+    #construct the objective function and its gradient for the frank-wolfe iterations
+    problem = tree.root.problem
+    node_objective, node_gradient = problem.f, problem.g
+    # If an objective and gradient builder is specified by the user, use them to build node specific objective function instead of global problem objective and derivative
+    options = tree.root.options
+    builder = options[:objective_gradient_builder]
+    if !(builder === nothing)
+        node_objective, node_gradient = get_node_objective_gradient(tree, node)
+    end
+
     x, primal, dual_gap, fw_status, atoms_set = solve_frank_wolfe(
         tree.root.options[:variant],
-        tree.root.problem.f,
-        tree.root.problem.g,
+        node_objective,
+        node_gradient,
         tree.root.problem.tlmo,
         node.active_set;
         epsilon=node.fw_dual_gap_limit,
