@@ -541,6 +541,19 @@ function get_node_objective_gradient(tree::BnBTree, node::FrankWolfeNode)
     return builder(int_vars, lb, ub)
 end
 
+"""
+    apply_propagation_routine(tree::BnBTree, lower_bounds, upper_bounds)
+
+Helper function that repeatedly applies the user specified propagation routine untill no further variable can be fixed    
+"""
+function apply_propagation_routine(tree::BnBTree, lower_bounds, upper_bounds)
+    user_defined_routine! = tree.root.options[:propagation_routine]
+    propagated_new_bounds = true
+    while propagated_new_bounds
+        propagated_new_bounds = user_defined_routine!(lower_bounds,upper_bounds)#returns true if further bounds are propagated
+    end
+end
+
 # utility function to print the values of the parameters
 _value_to_print(::BestFirstSearch) = "Move best bound"
 _value_to_print(::PartialStrongBranching) = "Partial strong branching"

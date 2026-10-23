@@ -56,6 +56,7 @@ function settings_bnb(; mode::Mode=Boscia.DEFAULT_MODE)
     branch_callback = nothing
     start_solution = nothing
     use_shadow_set = true
+    propagation_routine = nothing
     node_limit = if mode == HEURISTIC_MODE
         1000
     else
@@ -91,6 +92,7 @@ function settings_bnb(; mode::Mode=Boscia.DEFAULT_MODE)
         :ignore_lower_bound => ignore_lower_bound,
         :start_solution => start_solution,
         :use_shadow_set => use_shadow_set,
+        :propagation_routine => propagation_routine
     )
 end
 
