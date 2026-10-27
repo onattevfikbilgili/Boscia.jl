@@ -588,7 +588,7 @@ function compute_bound_distance(x,lower_bounds,upper_bounds,prop_info)
         dist2 = x[i] - upper_bounds[i]
         push!(arr,max(dist1,dist2))
     end
-    return(min(arr))
+    return(minimum(arr))
 end
 
 # utility function to print the values of the parameters
