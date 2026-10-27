@@ -51,45 +51,25 @@ function close_node!(tree::BnBTree, node::AbstractNode)
     return delete!(tree.node_queue, node.id)
 end
 
-# ---- branch! dispatch (only this bit changes) ----
+
 function branch!(tree, node)
     orbits_fn = get(tree.root.options, :orbital_orbits, nothing)
     if orbits_fn !== nothing
         return branch_orbital!(tree, node, orbits_fn)
     end
-
     variable_idx = get_branching_variable(tree, tree.options.branch_strategy, node)
     variable_idx == -1 && return
-    nodes_info = get_branching_nodes_info(tree, node, variable_idx)
-    for node_info in nodes_info
-        add_node!(tree, node, node_info)
-    end
-end
-
-
-
-# ---- filter an active set by a set of (lower, upper) fixings ----
-function filter_active_set_by_bounds(active_set, tree, lower, upper)
-    atol = tree.options.atol
-    AS = typeof(active_set)
-
-    kept = Tuple{Float64,eltype(active_set.atoms)}[]
-    for (λ, v) in active_set
-        ok = true
-        for (i, lo) in lower
-            if v[i] < lo - atol; ok = false; break; end
+    if tree.root.options[propagation_routine] === nothing
+        nodes_info = get_branching_nodes_info(tree, node, variable_idx)
+        for node_info in nodes_info
+            add_node!(tree, node, node_info)
         end
-        if ok
-            for (i, hi) in upper
-                if v[i] > hi + atol; ok = false; break; end
-            end
+    else
+        nodes_info = get_propagating_nodes_info(tree, node, variable_idx)
+        for node_info in nodes_info
+            add_node!(tree, node, node_info)
         end
-        ok && push!(kept, (λ, v))
     end
-
-    isempty(kept) && return nothing
-    total = sum(first, kept)
-    return AS([(w / total, v) for (w, v) in kept])
 end
 
 """
@@ -581,10 +561,6 @@ function evaluate_node!(tree::BnBTree, node::FrankWolfeNode)
         end
     end
 
-    if tree.root.options[:propagate_bounds] !== nothing
-        tree.root.options[:propagate_bounds](tree, node)
-    end
-
     # time tracking FW
     time_ref = Dates.now()
     domain_oracle = tree.root.options[:domain_oracle]
@@ -851,6 +827,123 @@ function get_orbital_branching_nodes_info(
         [info_right]
     else
         @warn "No orbital children could be created."
+        Vector{typeof(info_left)}()
+    end
+end
+
+
+function get_propagating_nodes_info(tree::BnBTree, node::FrankWolfeNode, vidx::Int)
+    if !is_valid_split(tree, vidx)
+        error("Splitting on the same index as parent! Abort!")
+    end
+
+    # get iterate, primal and lower bound
+    x = get_relaxed_values(tree, node)
+    primal = tree.root.problem.f(x)
+    lower_bound_base = primal - node.dual_gap
+    @assert isfinite(lower_bound_base)
+
+    #compute new left and right lower- / upper- bounds
+    varbounds_left  = copy(node.local_bounds)
+    varbounds_right = copy(node.local_bounds)
+    varbounds_left.upper_bounds[vidx] = ceil(x[vidx])
+    varbounds_right.lower_bounds[vidx] = floor(x[vidx])
+
+    #compute the bound propagations from the user provided propagation routine
+    prop_info_left = apply_propagation_routine!(tree,varbounds_left.lower_bounds,varbounds_left.upper_bounds)
+    prop_info_right = apply_propagation_routine!(tree,varbounds_right.lower_bounds,varbounds_right.upper_bounds)
+
+    #pseudocost branching info
+    left_distance  = compute_bound_distance(x,left_lower,left_upper)
+    right_distance = compute_bound_distance(x,right_lower,right_upper)
+
+    #branch callbacks
+    user_prune_left, user_prune_right = false, false
+    if tree.root.options[:branch_callback] !== nothing
+        user_prune_left, user_prune_right =
+            tree.root.options[:branch_callback](tree, node, rep)
+    end
+
+    #Active set filtering if FW variant is not decomposition invariant
+    is_di = typeof(tree.root.options[:variant]) <: DecompositionInvariant
+
+    if is_di
+        # DI: do not split the active set; do not touch pre_computed_set either.
+        # The FW loop will re-project using the child's local_bounds.
+        active_set_left  = node.active_set
+        active_set_right = node.active_set
+        pre_left  = node.pre_computed_set
+        pre_right = node.pre_computed_set
+    else
+        active_set_left  = filter_active_set_by_bounds(
+            node.active_set, tree, left_lower, left_upper)
+        active_set_right = filter_active_set_by_bounds(
+            node.active_set, tree, right_lower, right_upper)
+
+        # Empty filter -> fall back to the parent's active set; the child LMO
+        # will only accept vertices that satisfy the new local bounds, so the
+        # FW loop will simply discard infeasible ones on the first LMO call.
+        active_set_left  === nothing && (active_set_left  = node.active_set)
+        active_set_right === nothing && (active_set_right = node.active_set)
+
+        pre_left  = node.pre_computed_set
+        pre_right = node.pre_computed_set
+    end
+
+    # ---- node info ----
+    info_left = (
+        active_set=active_set_left,
+        discarded_vertices=node.discarded_vertices,
+        local_bounds=varbounds_left,
+        fw_dual_gap_limit=fw_dual_gap_limit,
+        fw_time=Millisecond(0),
+        global_tightenings=0,
+        local_tightenings=0,
+        local_potential_tightenings=0,
+        dual_gap=NaN,
+        pre_computed_set=pre_left,
+        parent_lower_bound_base=lower_bound_base,
+        branched_on=rep,
+        branched_right=true,
+        distance_to_int=left_distance,
+        active_set_size=0,
+        discarded_set_size=0,
+    )
+    info_right = (
+        active_set=active_set_right,
+        discarded_vertices=node.discarded_vertices,
+        local_bounds=varbounds_right,
+        fw_dual_gap_limit=fw_dual_gap_limit,
+        fw_time=Millisecond(0),
+        global_tightenings=0,
+        local_tightenings=0,
+        local_potential_tightenings=0,
+        dual_gap=NaN,
+        pre_computed_set=pre_right,
+        parent_lower_bound_base=lower_bound_base,
+        branched_on=rep,
+        branched_right=false,
+        distance_to_int=right_distance,
+        active_set_size=0,
+        discarded_set_size=0,
+    )
+
+    domain_left  = !isempty(active_set_left)
+    domain_right = !isempty(active_set_right)
+
+    return if domain_left && domain_right &&
+              !user_prune_left && !user_prune_right
+        [info_left, info_right]
+    elseif user_prune_left
+        [info_right]
+    elseif user_prune_right
+        [info_left]
+    elseif domain_left
+        [info_left]
+    elseif domain_right
+        [info_right]
+    else
+        @warn "No children could be created."
         Vector{typeof(info_left)}()
     end
 end

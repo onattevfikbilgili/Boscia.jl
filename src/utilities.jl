@@ -518,6 +518,30 @@ function get_distance_to_feasible(tree::BnBTree, value::Number)
     return abs(round(value) - value)
 end
 
+# ---- filter an active set by a set of (lower, upper) fixings ----
+function filter_active_set_by_bounds(active_set, tree, lower, upper)
+    atol = tree.options.atol
+    AS = typeof(active_set)
+
+    kept = Tuple{Float64,eltype(active_set.atoms)}[]
+    for (λ, v) in active_set
+        ok = true
+        for (i, lo) in lower
+            if v[i] < lo - atol; ok = false; break; end
+        end
+        if ok
+            for (i, hi) in upper
+                if v[i] > hi + atol; ok = false; break; end
+            end
+        end
+        ok && push!(kept, (λ, v))
+    end
+
+    isempty(kept) && return nothing
+    total = sum(first, kept)
+    return AS([(w / total, v) for (w, v) in kept])
+end
+
 """
     get_node_objective_gradient(tree::BnBTree, node::FrankWolfeNode)
 
@@ -546,12 +570,19 @@ end
 
 Helper function that repeatedly applies the user specified propagation routine untill no further variable can be fixed    
 """
-function apply_propagation_routine(tree::BnBTree, lower_bounds, upper_bounds)
+function apply_propagation_routine!(tree::BnBTree, lower_bounds, upper_bounds)
     user_defined_routine! = tree.root.options[:propagation_routine]
-    propagated_new_bounds = true
-    while propagated_new_bounds
-        propagated_new_bounds = user_defined_routine!(lower_bounds,upper_bounds)#returns true if further bounds are propagated
-    end
+    propagated_new_bounds = user_defined_routine!(lower_bounds,upper_bounds)#returns true if further bounds are propagated
+    return propagated_new_bounds
+end
+
+"""
+    function compute_bound_distance(x,left_lower,left_upper)
+
+Returns the minimal distance from a vector to some set of variable bounds
+"""
+function compute_bound_distance(x,lower_bounds,upper_bounds)
+    #asd
 end
 
 # utility function to print the values of the parameters
