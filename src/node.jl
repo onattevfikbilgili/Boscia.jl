@@ -846,12 +846,14 @@ function get_propagating_nodes_info(tree::BnBTree, node::FrankWolfeNode, vidx::I
     #compute new left and right lower- / upper- bounds
     varbounds_left  = copy(node.local_bounds)
     varbounds_right = copy(node.local_bounds)
-    varbounds_left.upper_bounds[vidx] = ceil(x[vidx])
-    varbounds_right.lower_bounds[vidx] = floor(x[vidx])
+    push!(varbounds_left.upper_bounds,  (vidx => floor(x[vidx])))
+	push!(varbounds_right.lower_bounds, (vidx => ceil(x[vidx])))
 
     #compute the bound propagations from the user provided propagation routine
     prop_info_left = apply_propagation_routine!(tree,varbounds_left.lower_bounds,varbounds_left.upper_bounds)
     prop_info_right = apply_propagation_routine!(tree,varbounds_right.lower_bounds,varbounds_right.upper_bounds)
+    push!(prop_info_left,vidx)
+    push!(prop_info_right,vidx)
 
     #pseudocost branching info
     left_distance  = compute_bound_distance(x,varbounds_left.lower_bounds,varbounds_left.upper_bounds,prop_info_left)
@@ -861,7 +863,7 @@ function get_propagating_nodes_info(tree::BnBTree, node::FrankWolfeNode, vidx::I
     user_prune_left, user_prune_right = false, false
     if tree.root.options[:branch_callback] !== nothing
         user_prune_left, user_prune_right =
-            tree.root.options[:branch_callback](tree, node, rep)
+            tree.root.options[:branch_callback](tree, node, vidx)
     end
 
     #Active set filtering if FW variant is not decomposition invariant
@@ -889,6 +891,8 @@ function get_propagating_nodes_info(tree::BnBTree, node::FrankWolfeNode, vidx::I
         pre_left  = node.pre_computed_set
         pre_right = node.pre_computed_set
     end
+    
+    fw_dual_gap_limit = max(tree.root.options[:dual_gap_decay_factor] * node.fw_dual_gap_limit, tree.root.options[:min_node_fw_epsilon])
 
     #node info
     info_left = (
@@ -903,8 +907,8 @@ function get_propagating_nodes_info(tree::BnBTree, node::FrankWolfeNode, vidx::I
         dual_gap=NaN,
         pre_computed_set=pre_left,
         parent_lower_bound_base=lower_bound_base,
-        branched_on=rep,
-        branched_right=true,
+        branched_on=vidx,
+        branched_right=false,
         distance_to_int=left_distance,
         active_set_size=0,
         discarded_set_size=0,
@@ -921,8 +925,8 @@ function get_propagating_nodes_info(tree::BnBTree, node::FrankWolfeNode, vidx::I
         dual_gap=NaN,
         pre_computed_set=pre_right,
         parent_lower_bound_base=lower_bound_base,
-        branched_on=rep,
-        branched_right=false,
+        branched_on=vidx,
+        branched_right=true,
         distance_to_int=right_distance,
         active_set_size=0,
         discarded_set_size=0,
