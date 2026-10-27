@@ -856,8 +856,8 @@ function get_propagating_nodes_info(tree::BnBTree, node::FrankWolfeNode, vidx::I
     push!(prop_info_right,vidx)
 
     #pseudocost branching info
-    left_distance  = compute_bound_distance(x,varbounds_left.lower_bounds,varbounds_left.upper_bounds,prop_info_left)
-    right_distance = compute_bound_distance(x,varbounds_right.lower_bounds,varbounds_right.upper_bounds,prop_info_right)
+    left_distance = x[vidx] - floor(x[vidx])
+    right_distance = ceil(x[vidx]) - x[vidx]
 
     #branch callbacks
     user_prune_left, user_prune_right = false, false
