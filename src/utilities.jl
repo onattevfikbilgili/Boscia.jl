@@ -581,14 +581,15 @@ end
 
 Returns the minimal distance from a vector to some set of variable bounds
 """
-function compute_bound_distance(x,lower_bounds,upper_bounds,prop_info)
-    arr = []
+function compute_bound_distance(x, lower_bounds, upper_bounds, prop_info)
+    isempty(prop_info) && return 0.0
+    arr = Float64[]
     for i in prop_info
         dist1 = lower_bounds[i] - x[i]
         dist2 = x[i] - upper_bounds[i]
-        push!(arr,max(dist1,dist2))
+        push!(arr, max(dist1, dist2))
     end
-    return(minimum(arr))
+    return minimum(arr)
 end
 
 # utility function to print the values of the parameters
