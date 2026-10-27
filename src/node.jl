@@ -854,8 +854,8 @@ function get_propagating_nodes_info(tree::BnBTree, node::FrankWolfeNode, vidx::I
     prop_info_right = apply_propagation_routine!(tree,varbounds_right.lower_bounds,varbounds_right.upper_bounds)
 
     #pseudocost branching info
-    left_distance  = compute_bound_distance(x,left_lower,left_upper,prop_info_left)
-    right_distance = compute_bound_distance(x,right_lower,right_upper,prop_info_right)
+    left_distance  = compute_bound_distance(x,varbounds_left.lower_bounds,varbounds_left.upper_bounds,prop_info_left)
+    right_distance = compute_bound_distance(x,varbounds_right.lower_bounds,varbounds_right.upper_bounds,prop_info_right)
 
     #branch callbacks
     user_prune_left, user_prune_right = false, false
@@ -876,9 +876,9 @@ function get_propagating_nodes_info(tree::BnBTree, node::FrankWolfeNode, vidx::I
         pre_right = node.pre_computed_set
     else
         active_set_left  = filter_active_set_by_bounds(
-            node.active_set, tree, left_lower, left_upper)
+            node.active_set, tree, varbounds_left.lower_bounds, varbounds_left.upper_bounds)
         active_set_right = filter_active_set_by_bounds(
-            node.active_set, tree, right_lower, right_upper)
+            node.active_set, tree, varbounds_right.lower_bounds, varbounds_right.upper_bounds)
 
         # Empty filter -> fall back to the parent's active set; the child LMO
         # will only accept vertices that satisfy the new local bounds, so the
@@ -890,7 +890,7 @@ function get_propagating_nodes_info(tree::BnBTree, node::FrankWolfeNode, vidx::I
         pre_right = node.pre_computed_set
     end
 
-    # ---- node info ----
+    #node info
     info_left = (
         active_set=active_set_left,
         discarded_vertices=node.discarded_vertices,
