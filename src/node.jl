@@ -59,7 +59,7 @@ function branch!(tree, node)
     end
     variable_idx = get_branching_variable(tree, tree.options.branch_strategy, node)
     variable_idx == -1 && return
-    if tree.root.options[propagation_routine] === nothing
+    if tree.root.options[:propagation_routine] === nothing
         nodes_info = get_branching_nodes_info(tree, node, variable_idx)
         for node_info in nodes_info
             add_node!(tree, node, node_info)
