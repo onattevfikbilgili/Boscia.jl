@@ -568,12 +568,12 @@ end
 """
     apply_propagation_routine(tree::BnBTree, lower_bounds, upper_bounds)
 
-Helper function that repeatedly applies the user specified propagation routine untill no further variable can be fixed    
+Helper function that repeatedly applies the user specified propagation routine    
 """
 function apply_propagation_routine!(tree::BnBTree, lower_bounds, upper_bounds)
     user_defined_routine! = tree.root.options[:propagation_routine]
-    propagated_new_bounds = user_defined_routine!(lower_bounds,upper_bounds)#returns true if further bounds are propagated
-    return propagated_new_bounds
+    newly_propagated_bounds = user_defined_routine!(lower_bounds,upper_bounds)#returns an array of variables for which new variables have been propagated
+    return newly_propagated_bounds
 end
 
 """
@@ -581,8 +581,14 @@ end
 
 Returns the minimal distance from a vector to some set of variable bounds
 """
-function compute_bound_distance(x,lower_bounds,upper_bounds)
-    #asd
+function compute_bound_distance(x,lower_bounds,upper_bounds,prop_info)
+    arr = []
+    for i in prop_info
+        dist1 = lower_bounds[i] - x[i]
+        dist2 = x[i] - upper_bounds[i]
+        push!(arr,max(dist1,dist2))
+    end
+    return(min(arr))
 end
 
 # utility function to print the values of the parameters
