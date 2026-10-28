@@ -515,11 +515,9 @@ function evaluate_node!(tree::BnBTree, node::FrankWolfeNode)
     domain_oracle = tree.root.options[:domain_oracle]
 
     #construct the objective function and its gradient for the frank-wolfe iterations
-    problem = tree.root.problem
-    node_objective, node_gradient = problem.f, problem.g
+    node_objective, node_gradient = tree.root.problem.f, tree.root.problem.g
     # If an objective and gradient builder is specified by the user, use them to build node specific objective function instead of global problem objective and derivative
-    options = tree.root.options
-    builder = options[:objective_gradient_builder]
+    builder = tree.root.options[:objective_gradient_builder]
     if !(builder === nothing)
         node_objective, node_gradient = get_node_objective_gradient(tree, node)
     end

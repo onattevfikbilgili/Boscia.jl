@@ -59,8 +59,7 @@ N = 1.0
         MOI.add_constraint(o, -N * z[i] - w[i], MOI.LessThan(0.0))
         MOI.add_constraint(o, N * z[i] - w[i], MOI.GreaterThan(0.0))
     end
-    sum_z = MOI.ScalarAffineFunction([MOI.ScalarAffineTerm(1.0, zi) for zi in z], 0.0)
-    MOI.add_constraint(o, sum_z, MOI.LessThan(1.0 * k))
+    MOI.add_constraint(o, sum(z, init=0.0), MOI.LessThan(1.0 * k))
     MOI.add_constraint(o, b, MOI.LessThan(N))
     MOI.add_constraint(o, b, MOI.GreaterThan(-N))
     lmo = FrankWolfe.MathOptLMO(o)
@@ -133,8 +132,7 @@ end
         MOI.add_constraint(o, gl, MOI.Indicator{MOI.ACTIVATE_ON_ONE}(MOI.LessThan(N)))
         MOI.add_constraint(o, gg, MOI.Indicator{MOI.ACTIVATE_ON_ONE}(MOI.LessThan(-N)))
     end
-    sum_z = MOI.ScalarAffineFunction([MOI.ScalarAffineTerm(1.0, zi) for zi in z], 0.0)
-    MOI.add_constraint(o, sum_z, MOI.LessThan(1.0 * k))
+    MOI.add_constraint(o, sum(z, init=0.0), MOI.LessThan(1.0 * k))
     MOI.add_constraint(o, b, MOI.LessThan(N))
     MOI.add_constraint(o, b, MOI.GreaterThan(-N))
     lmo = FrankWolfe.MathOptLMO(o)
@@ -235,16 +233,12 @@ push!(groups, ((k-1)*group_size+1):pg)
         MOI.add_constraint(o, gl, MOI.Indicator{MOI.ACTIVATE_ON_ONE}(MOI.LessThan(Ng)))
         MOI.add_constraint(o, gg, MOI.Indicator{MOI.ACTIVATE_ON_ONE}(MOI.LessThan(-Ng)))
     end
-    sum_z = MOI.ScalarAffineFunction([MOI.ScalarAffineTerm(1.0, zi) for zi in z], 0.0)
-    MOI.add_constraint(o, sum_z, MOI.LessThan(1.0 * k))
+    MOI.add_constraint(o, sum(z, init=0.0), MOI.LessThan(1.0 * k))
     MOI.add_constraint(o, b, MOI.LessThan(Ng))
     MOI.add_constraint(o, b, MOI.GreaterThan(-Ng))
     for i in 1:k
-        MOI.add_constraint(
-            o,
-            MOI.ScalarAffineFunction(MOI.ScalarAffineTerm.(ones(group_size), z[groups[i]]), 0.0),
-            MOI.GreaterThan(1.0),
-        )
+        #MOI.add_constraint(o, MOI.ScalarAffineFunction(MOI.ScalarAffineTerm.(ones(group_size),x[groups[i]]), 0.0), MOI.GreaterThan(1.0))
+        MOI.add_constraint(o, sum(z[groups[i]], init=0.0), MOI.GreaterThan(1.0))
     end
     lmo = FrankWolfe.MathOptLMO(o)
 
@@ -314,16 +308,12 @@ end
         MOI.add_constraint(o, gl, MOI.Indicator{MOI.ACTIVATE_ON_ONE}(MOI.LessThan(Ng)))
         MOI.add_constraint(o, gg, MOI.Indicator{MOI.ACTIVATE_ON_ONE}(MOI.LessThan(-Ng)))
     end
-    sum_z = MOI.ScalarAffineFunction([MOI.ScalarAffineTerm(1.0, zi) for zi in z], 0.0)
-    MOI.add_constraint(o, sum_z, MOI.LessThan(1.0 * k))
+    MOI.add_constraint(o, sum(z, init=0.0), MOI.LessThan(1.0 * k))
     MOI.add_constraint(o, b, MOI.LessThan(Ng))
     MOI.add_constraint(o, b, MOI.GreaterThan(-Ng))
     for i in 1:k
-        MOI.add_constraint(
-            o,
-            MOI.ScalarAffineFunction(MOI.ScalarAffineTerm.(ones(group_size), z[groups[i]]), 0.0),
-            MOI.GreaterThan(1.0),
-        )
+        #MOI.add_constraint(o, MOI.ScalarAffineFunction(MOI.ScalarAffineTerm.(ones(group_size),x[groups[i]]), 0.0), MOI.GreaterThan(1.0))
+        MOI.add_constraint(o, sum(z[groups[i]], init=0.0), MOI.GreaterThan(1.0))
     end
     lmo = FrankWolfe.MathOptLMO(o)
     α = 1.3
