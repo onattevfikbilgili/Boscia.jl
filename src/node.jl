@@ -53,8 +53,8 @@ end
 
 
 function branch!(tree, node)
-    orbits_fn = get(tree.root.options, :orbital_orbits, nothing)
-    if orbits_fn !== nothing
+    orbits_fn = get(tree.root.options, :orbital_orbits, nothing)#return branch_orbital!(tree, node, orbits_fn)
+    if orbits_fn !== nothing && tree.root.options[:propagation_routine] === nothing
         return branch_orbital!(tree, node, orbits_fn)
     end
     variable_idx = get_branching_variable(tree, tree.options.branch_strategy, node)
