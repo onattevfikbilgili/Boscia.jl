@@ -576,6 +576,57 @@ function apply_propagation_routine!(tree::BnBTree, lower_bounds, upper_bounds)
     return newly_propagated_bounds
 end
 
+"""
+    apply_orbital_fixing!(varbounds, n_vertices::Int)
+
+Orbital fixing (Theorem 3, Ostrowski et al., Math. Prog. 2009).
+
+Given a child's `varbounds` and the number of graph vertices, computes the
+orbital partition of the group `G(A(F_1, ∅))` — i.e. only edges fixed to 1
+are treated as fixed, all other edges (including those fixed to 0) are
+considered unassigned. For each orbit that contains a member with
+`upper_bound == 0` in the actual child, all remaining members of that orbit
+are fixed to zero.
+
+Mutates `varbounds` in place and returns the set `S` of newly-fixed indices.
+"""
+function apply_orbital_fixing!(varbounds::IntegerBounds, n_vertices::Int)
+    n_edges = n_vertices * (n_vertices - 1) ÷ 2
+
+    lb = zeros(Int, n_edges)
+    ub = ones(Int,  n_edges)
+    for (i, v) in varbounds.lower_bounds
+        lb[i] = Int(round(v))
+    end
+    for (i, v) in varbounds.upper_bounds
+        ub[i] = Int(round(v))
+    end
+
+    # Orbits of G(A(F_1, ∅)): pretend F_0 is empty for the symmetry computation.
+    ones_ub = ones(Int, n_edges)
+    orbits  = compute_unassigned_orbits(n_vertices, lb, ones_ub)
+
+    S = Int[]
+    for orbit in orbits
+        if any(e -> ub[e] == 0, orbit)          # orbit intersects F_0
+            for e in orbit
+                if ub[e] != 0                    # e is still free in this child
+                    push!(S, e)
+                end
+            end
+        end
+    end
+
+    for e in S
+        if haskey(varbounds.lower_bounds, e)
+            delete!(varbounds.lower_bounds, e)
+        end
+        varbounds.upper_bounds[e] = 0.0
+    end
+
+    return S
+end
+
 # utility function to print the values of the parameters
 _value_to_print(::BestFirstSearch) = "Move best bound"
 _value_to_print(::PartialStrongBranching) = "Partial strong branching"

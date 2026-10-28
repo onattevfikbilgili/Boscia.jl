@@ -65,62 +65,18 @@ function branch!(tree, node)
             add_node!(tree, node, node_info)
         end
     else
-        nodes_info = get_propagating_nodes_info(tree, node, variable_idx)
-        for node_info in nodes_info
-            add_node!(tree, node, node_info)
-        end
-    end
-end
-
-"""
-    apply_orbital_fixing!(varbounds, n_vertices::Int)
-
-Orbital fixing (Theorem 3, Ostrowski et al., Math. Prog. 2009).
-
-Given a child's `varbounds` and the number of graph vertices, computes the
-orbital partition of the group `G(A(F_1, ∅))` — i.e. only edges fixed to 1
-are treated as fixed, all other edges (including those fixed to 0) are
-considered unassigned. For each orbit that contains a member with
-`upper_bound == 0` in the actual child, all remaining members of that orbit
-are fixed to zero.
-
-Mutates `varbounds` in place and returns the set `S` of newly-fixed indices.
-"""
-function apply_orbital_fixing!(varbounds::IntegerBounds, n_vertices::Int)
-    n_edges = n_vertices * (n_vertices - 1) ÷ 2
-
-    lb = zeros(Int, n_edges)
-    ub = ones(Int,  n_edges)
-    for (i, v) in varbounds.lower_bounds
-        lb[i] = Int(round(v))
-    end
-    for (i, v) in varbounds.upper_bounds
-        ub[i] = Int(round(v))
-    end
-
-    # Orbits of G(A(F_1, ∅)): pretend F_0 is empty for the symmetry computation.
-    ones_ub = ones(Int, n_edges)
-    orbits  = compute_unassigned_orbits(n_vertices, lb, ones_ub)
-
-    S = Int[]
-    for orbit in orbits
-        if any(e -> ub[e] == 0, orbit)          # orbit intersects F_0
-            for e in orbit
-                if ub[e] != 0                    # e is still free in this child
-                    push!(S, e)
-                end
+        if orbits_fn !== nothing
+            nodes_info = get_propagating_nodes_info(tree, node, variable_idx)
+            for node_info in nodes_info
+                add_node!(tree, node, node_info)
+            end
+        else
+            nodes_info = get_orbital_propagating_nodes_info(tree, node, variable_idx,orbits_fn)
+            for node_info in nodes_info
+                add_node!(tree, node, node_info)
             end
         end
     end
-
-    for e in S
-        if haskey(varbounds.lower_bounds, e)
-            delete!(varbounds.lower_bounds, e)
-        end
-        varbounds.upper_bounds[e] = 0.0
-    end
-
-    return S
 end
 
 """
@@ -852,8 +808,161 @@ function get_propagating_nodes_info(tree::BnBTree, node::FrankWolfeNode, vidx::I
     #compute the bound propagations from the user provided propagation routine
     prop_info_left = apply_propagation_routine!(tree,varbounds_left.lower_bounds,varbounds_left.upper_bounds)
     prop_info_right = apply_propagation_routine!(tree,varbounds_right.lower_bounds,varbounds_right.upper_bounds)
-    push!(prop_info_left,vidx)
-    push!(prop_info_right,vidx)
+
+    #pseudocost branching info
+    left_distance = x[vidx] - floor(x[vidx])
+    right_distance = ceil(x[vidx]) - x[vidx]
+
+    #branch callbacks
+    user_prune_left, user_prune_right = false, false
+    if tree.root.options[:branch_callback] !== nothing
+        user_prune_left, user_prune_right =
+            tree.root.options[:branch_callback](tree, node, vidx)
+    end
+
+    #Active set filtering if FW variant is not decomposition invariant
+    is_di = typeof(tree.root.options[:variant]) <: DecompositionInvariant
+
+    if is_di
+        # DI: do not split the active set; do not touch pre_computed_set either.
+        # The FW loop will re-project using the child's local_bounds.
+        active_set_left  = node.active_set
+        active_set_right = node.active_set
+        pre_left  = node.pre_computed_set
+        pre_right = node.pre_computed_set
+    else
+        active_set_left  = filter_active_set_by_bounds(
+            node.active_set, tree, varbounds_left.lower_bounds, varbounds_left.upper_bounds)
+        active_set_right = filter_active_set_by_bounds(
+            node.active_set, tree, varbounds_right.lower_bounds, varbounds_right.upper_bounds)
+
+        # Empty filter -> fall back to the parent's active set; the child LMO
+        # will only accept vertices that satisfy the new local bounds, so the
+        # FW loop will simply discard infeasible ones on the first LMO call.
+        active_set_left  === nothing && (active_set_left  = node.active_set)
+        active_set_right === nothing && (active_set_right = node.active_set)
+
+        pre_left  = node.pre_computed_set
+        pre_right = node.pre_computed_set
+    end
+    
+    fw_dual_gap_limit = max(tree.root.options[:dual_gap_decay_factor] * node.fw_dual_gap_limit, tree.root.options[:min_node_fw_epsilon])
+
+    #node info
+    info_left = (
+        active_set=active_set_left,
+        discarded_vertices=node.discarded_vertices,
+        local_bounds=varbounds_left,
+        fw_dual_gap_limit=fw_dual_gap_limit,
+        fw_time=Millisecond(0),
+        global_tightenings=0,
+        local_tightenings=0,
+        local_potential_tightenings=0,
+        dual_gap=NaN,
+        pre_computed_set=pre_left,
+        parent_lower_bound_base=lower_bound_base,
+        branched_on=vidx,
+        branched_right=false,
+        distance_to_int=left_distance,
+        active_set_size=0,
+        discarded_set_size=0,
+    )
+    info_right = (
+        active_set=active_set_right,
+        discarded_vertices=node.discarded_vertices,
+        local_bounds=varbounds_right,
+        fw_dual_gap_limit=fw_dual_gap_limit,
+        fw_time=Millisecond(0),
+        global_tightenings=0,
+        local_tightenings=0,
+        local_potential_tightenings=0,
+        dual_gap=NaN,
+        pre_computed_set=pre_right,
+        parent_lower_bound_base=lower_bound_base,
+        branched_on=vidx,
+        branched_right=true,
+        distance_to_int=right_distance,
+        active_set_size=0,
+        discarded_set_size=0,
+    )
+
+    domain_left  = !isempty(active_set_left)
+    domain_right = !isempty(active_set_right)
+
+    return if domain_left && domain_right &&
+              !user_prune_left && !user_prune_right
+        [info_left, info_right]
+    elseif user_prune_left
+        [info_right]
+    elseif user_prune_right
+        [info_left]
+    elseif domain_left
+        [info_left]
+    elseif domain_right
+        [info_right]
+    else
+        @warn "No children could be created."
+        Vector{typeof(info_left)}()
+    end
+end
+
+
+function get_orbital_propagating_nodes_info(tree::BnBTree, node::FrankWolfeNode, vidx::Int, orbits_fn)
+    #compute current orbits as well as the orbit containining the branching variable
+    orbits = orbits_fn(tree, node)
+    isempty(orbits) && return
+    O = nothing
+    for orbit in orbits
+        if variable_idx in orbit
+            O = orbit
+            break
+        end
+    end
+    O === nothing && return
+
+    # get iterate, primal and lower bound
+    x = get_relaxed_values(tree, node)
+    primal = tree.root.problem.f(x)
+    lower_bound_base = primal - node.dual_gap
+    @assert isfinite(lower_bound_base)
+
+    #compute new left and right lower- / upper- bounds based on orbital branching disjunction
+    varbounds_left  = copy(node.local_bounds)
+    varbounds_right = copy(node.local_bounds)
+	push!(varbounds_right.lower_bounds, (vidx => ceil(x[vidx])))
+    for o in O
+        push!(varbounds_left.upper_bounds,  (vidx => floor(x[o])))
+    end
+
+    #enter constraint propagation / orbital fixing for loop
+    #create seperate loops for left and right child nodes
+    #first apply the user provided propagation routine, then apply orbital fixings
+    #repeat until no variables can be implied by orbital fixing
+
+    n_vertices = get(tree.root.options, :orbital_n_vertices, nothing)
+    #left loop
+    fixed_new_variables = true
+    while fixed_new_variables
+        #apply user provided propagation routine
+        prop_info_left = apply_propagation_routine!(tree,varbounds_left.lower_bounds,varbounds_left.upper_bounds)
+        #apply orbital fixing
+        S_left  = apply_orbital_fixing!(varbounds_left,  n_vertices)
+        if isempty(S_left)
+            fixed_new_variables = false
+        end
+    end
+
+    #right loop
+    fixed_new_variables = true
+    while fixed_new_variables
+        #apply user provided propagation routine
+        prop_info_right = apply_propagation_routine!(tree,varbounds_right.lower_bounds,varbounds_right.upper_bounds)
+        #apply orbital fixing
+        S_right  = apply_orbital_fixing!(varbounds_right,  n_vertices)
+        if isempty(S_right)
+            fixed_new_variables = false
+        end
+    end
 
     #pseudocost branching info
     left_distance = x[vidx] - floor(x[vidx])
