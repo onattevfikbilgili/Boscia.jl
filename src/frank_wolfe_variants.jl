@@ -487,12 +487,79 @@ struct StochasticFWParameters
 end
 
 function solve_using_stochastic_frank_wolfe(tree::BnBTree, lmo)
-	stochastic_parameters = tree.root.options[:stochastic_parameters]
-	x0 = FrankWolfe.compute_extreme_point(lmo, zeros(stochastic_parameters.dimension))
-	stochastic_objective = stochastic_parameters.objective
-	batch_size = stochastic_parameters.batch_size
-	x, _, primal, dual_gap, status = FrankWolfe.stochastic_frank_wolfe(stochastic_objective, lmo, x0; max_iteration = tree.root.options[:max_fw_iter], batch_size = 32, verbose = tree.root.options[:fw_verbose])
-	return x, primal, dual_gap, status, nothing
+    stochastic_parameters = tree.root.options[:stochastic_parameters]
+    dimension = stochastic_parameters.dimension
+    stochastic_objective = stochastic_parameters.objective
+    batch_size = stochastic_parameters.batch_size
+    x0 = FrankWolfe.compute_extreme_point(lmo, zeros(dimension))
+    x, _, primal_stoch, dual_gap_stoch, status, _ = FrankWolfe.stochastic_frank_wolfe(
+        stochastic_objective, lmo, x0;
+        max_iteration = tree.root.options[:max_fw_iter],
+        batch_size = batch_size,
+        verbose = tree.root.options[:fw_verbose],
+    	use_full_evaluation = true,
+    )
+
+    #align with the true objective Boscia uses
+    primal   = tree.root.problem.f(x)
+    scale    = primal / primal_stoch
+    dual_gap = dual_gap_stoch * scale
+
+    atoms = Tuple{Float64, Vector{Float64}}[]
+    for i in 1:dimension
+        if x[i] > 1e-12
+            v = zeros(dimension)
+            v[i] = 1.0
+            push!(atoms, (x[i], v))
+        end
+    end
+    active_set = FrankWolfe.ActiveSet(atoms)
+
+    return x, primal, dual_gap, status, active_set
+end
+
+
+function solve_frank_wolfe(
+    ::StochasticFrankWolfe,
+    f,
+    grad!,
+    lmo,
+    active_set;
+    line_search::FrankWolfe.LineSearchMethod=FrankWolfe.Secant(),
+    epsilon=1e-7,
+    max_iteration=10000,
+    add_dropped_vertices=false,
+    use_extra_vertex_storage=false,
+    extra_vertex_storage=nothing,
+    callback=nothing,
+    lazy=false,
+    lazy_tolerance=2.0,
+    timeout=Inf,
+    verbose=false,
+    workspace=nothing,
+    kwargs...,
+)
+    # Postsolve uses the full objective and gradient. Fall back to a standard
+    # deterministic FW variant so the run converges rigorously.
+    return solve_frank_wolfe(
+        BlendedPairwiseConditionalGradient(),
+        f,
+        grad!,
+        lmo,
+        active_set;
+        line_search=line_search,
+        epsilon=epsilon,
+        max_iteration=max_iteration,
+        add_dropped_vertices=add_dropped_vertices,
+        use_extra_vertex_storage=use_extra_vertex_storage,
+        extra_vertex_storage=extra_vertex_storage,
+        callback=callback,
+        lazy=lazy,
+        lazy_tolerance=lazy_tolerance,
+        timeout=timeout,
+        verbose=verbose,
+        workspace=workspace,
+    )
 end
 
 Base.print(io::IO, ::StochasticFrankWolfe) = print(io, "StochasticFrank-Wolfe")
