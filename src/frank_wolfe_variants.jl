@@ -467,3 +467,32 @@ function solve_frank_wolfe(
 end
 
 Base.print(io::IO, ::StandardFrankWolfe) = print(io, "StandardFrank-Wolfe")
+
+"""
+	Stochastic Frank Wolfe
+
+Stochastic Frank Wolfe uses a stochastic gradient oracle for Frank-Wolfe iterations where full gradient evaluation is expensive.
+
+After each run of stochastic Frank-Wolfe a full gradient evaluation is used to get a dual bound that verifies convergence.
+
+If the desired gap has not been reached then stochastic Frank-Wolfe is restarted from the returned point. 
+
+"""
+struct StochasticFrankWolfe <: FrankWolfeVariant end
+
+struct StochasticFWParameters
+	dimension::Int
+	objective::FrankWolfe.AbstractStochasticObjective
+	batch_size::Int
+end
+
+function solve_using_stochastic_frank_wolfe(tree::BnBTree, lmo)
+	stochastic_parameters = tree.root.options[:stochastic_parameters]
+	x0 = FrankWolfe.compute_extreme_point(lmo, zeros(stochastic_parameters.dimension))
+	stochastic_objective = stochastic_parameters.objective
+	batch_size = stochastic_parameters.batch_size
+	x, _, primal, dual_gap, status = FrankWolfe.stochastic_frank_wolfe(stochastic_objective, lmo, x0; max_iteration = tree.root.options[:max_fw_iter], batch_size = 32, verbose = tree.root.options[:fw_verbose])
+	return x, primal, dual_gap, status, nothing
+end
+
+Base.print(io::IO, ::StochasticFrankWolfe) = print(io, "StochasticFrank-Wolfe")

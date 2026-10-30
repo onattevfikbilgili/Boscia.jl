@@ -511,28 +511,39 @@ function evaluate_node!(tree::BnBTree, node::FrankWolfeNode)
     # time tracking FW
     time_ref = Dates.now()
     domain_oracle = tree.root.options[:domain_oracle]
-
-    x, primal, dual_gap, fw_status, atoms_set = solve_frank_wolfe(
-        tree.root.options[:variant],
-        tree.root.problem.f,
-        tree.root.problem.g,
-        tree.root.problem.tlmo,
-        node.active_set;
-        epsilon=node.fw_dual_gap_limit,
-        max_iteration=tree.root.options[:max_fw_iter],
-        line_search=tree.root.options[:line_search],
-        lazy=tree.root.options[:lazy],
-        lazy_tolerance=tree.root.options[:lazy_tolerance],
-        add_dropped_vertices=tree.root.options[:use_shadow_set],
-        use_extra_vertex_storage=tree.root.options[:use_shadow_set],
-        extra_vertex_storage=node.discarded_vertices,
-        callback=tree.root.options[:callback],
-        verbose=tree.root.options[:fw_verbose],
-        timeout=tree.root.options[:fw_timeout],
-        pre_computed_set=node.pre_computed_set,
-        domain_oracle=domain_oracle,
-        decomposition_invariant_starting_point=decomposition_invariant_starting_point,
-    )
+    
+    x = nothing
+    primal = nothing
+    dual_gap = nothing
+    fw_status = nothing
+    atoms_set = nothing
+	
+	if !(typeof(tree.root.options[:variant]) <: StochasticFrankWolfe)
+    	x, primal, dual_gap, fw_status, atoms_set = solve_frank_wolfe(
+        	tree.root.options[:variant],
+        	tree.root.problem.f,
+	        tree.root.problem.g,
+    	    tree.root.problem.tlmo,
+    	    node.active_set;
+	        epsilon=node.fw_dual_gap_limit,
+	        max_iteration=tree.root.options[:max_fw_iter],
+	        line_search=tree.root.options[:line_search],
+	        lazy=tree.root.options[:lazy],
+	        lazy_tolerance=tree.root.options[:lazy_tolerance],
+	        add_dropped_vertices=tree.root.options[:use_shadow_set],
+	        use_extra_vertex_storage=tree.root.options[:use_shadow_set],
+	        extra_vertex_storage=node.discarded_vertices,
+	        callback=tree.root.options[:callback],
+	        verbose=tree.root.options[:fw_verbose],
+	        timeout=tree.root.options[:fw_timeout],
+	        pre_computed_set=node.pre_computed_set,
+	        domain_oracle=domain_oracle,
+	        decomposition_invariant_starting_point=decomposition_invariant_starting_point,
+	    )
+	else
+		#call stochastic frank wolfe
+		x, primal, dual_gap, fw_status, atoms_set = solve_using_stochastic_frank_wolfe(tree,tree.root.problem.tlmo)
+	end
 
     if tree.root.options[:fw_verbose]
         @show fw_status

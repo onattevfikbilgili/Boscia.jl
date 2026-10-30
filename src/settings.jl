@@ -127,6 +127,7 @@ function settings_frank_wolfe(; mode::Mode=Boscia.DEFAULT_MODE)
     fw_verbose = false
     lazy = true
     lazy_tolerance = 2
+    stochastic_parameters = nothing
 
     return Dict(
         :variant => variant,
@@ -137,6 +138,7 @@ function settings_frank_wolfe(; mode::Mode=Boscia.DEFAULT_MODE)
         :fw_verbose => fw_verbose,
         :lazy => lazy,
         :lazy_tolerance => lazy_tolerance,
+        :stochastic_parameters => stochastic_parameters,
     )
 end
 
