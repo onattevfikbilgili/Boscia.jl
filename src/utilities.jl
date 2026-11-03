@@ -604,7 +604,8 @@ function apply_orbital_fixing!(varbounds::IntegerBounds, n_vertices::Int)
 
     # Orbits of G(A(F_1, ∅)): pretend F_0 is empty for the symmetry computation.
     ones_ub = ones(Int, n_edges)
-    orbits  = compute_unassigned_orbits(n_vertices, lb, ones_ub)
+    orbits_fn = get(tree.root.options, :orbital_orbits, nothing)
+    orbits = orbits_fn(tree, node)
 
     S = Int[]
     for orbit in orbits
