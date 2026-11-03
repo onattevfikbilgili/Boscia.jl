@@ -66,12 +66,12 @@ function branch!(tree, node)
         end
     else
         if orbits_fn !== nothing
-            nodes_info = get_propagating_nodes_info(tree, node, variable_idx)
+            nodes_info = get_orbital_propagating_nodes_info(tree, node, variable_idx, orbits_fn)
             for node_info in nodes_info
                 add_node!(tree, node, node_info)
             end
         else
-            nodes_info = get_orbital_propagating_nodes_info(tree, node, variable_idx,orbits_fn)
+            nodes_info = get_propagating_nodes_info(tree, node, variable_idx)
             for node_info in nodes_info
                 add_node!(tree, node, node_info)
             end
@@ -913,7 +913,7 @@ function get_orbital_propagating_nodes_info(tree::BnBTree, node::FrankWolfeNode,
     isempty(orbits) && return
     O = nothing
     for orbit in orbits
-        if variable_idx in orbit
+        if vidx in orbit
             O = orbit
             break
         end
@@ -931,7 +931,7 @@ function get_orbital_propagating_nodes_info(tree::BnBTree, node::FrankWolfeNode,
     varbounds_right = copy(node.local_bounds)
 	push!(varbounds_right.lower_bounds, (vidx => ceil(x[vidx])))
     for o in O
-        push!(varbounds_left.upper_bounds,  (vidx => floor(x[o])))
+        push!(varbounds_left.upper_bounds,  (o => floor(x[o])))
     end
 
     #enter constraint propagation / orbital fixing for loop
