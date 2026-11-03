@@ -716,14 +716,13 @@ function get_orbital_branching_nodes_info(
         push!(varbounds_right.upper_bounds, (k => v))
     end
     # ---- orbital fixing (Theorem 3) ----
-    n_vertices = get(tree.root.options, :orbital_n_vertices, nothing)
-    if n_vertices !== nothing
-        S_left  = apply_orbital_fixing!(varbounds_left,  n_vertices)
-        S_right = apply_orbital_fixing!(varbounds_right, n_vertices)
+    fixing_fn = get(tree.root.options, :orbital_fixing_orbits, nothing)
+    if fixing_fn !== nothing
+        S_left  = apply_orbital_fixing!(varbounds_left,  fixing_fn)
+        S_right = apply_orbital_fixing!(varbounds_right, fixing_fn)
         isempty(S_left)  || @debug "Orbital fixing (left)  fixed $(length(S_left)) vars:  $S_left"
         isempty(S_right) || @debug "Orbital fixing (right) fixed $(length(S_right)) vars: $S_right"
     end
-
     fw_dual_gap_limit = max(
         tree.root.options[:dual_gap_decay_factor] * node.fw_dual_gap_limit,
         tree.root.options[:min_node_fw_epsilon],
@@ -939,29 +938,23 @@ function get_orbital_propagating_nodes_info(tree::BnBTree, node::FrankWolfeNode,
     #first apply the user provided propagation routine, then apply orbital fixings
     #repeat until no variables can be implied by orbital fixing
 
-    n_vertices = get(tree.root.options, :orbital_n_vertices, nothing)
-    #left loop
+    fixing_fn = get(tree.root.options, :orbital_fixing_orbits, nothing)
+    # left loop: run propagation and orbital fixing to a fixpoint
     fixed_new_variables = true
     while fixed_new_variables
-        #apply user provided propagation routine
-        prop_info_left = apply_propagation_routine!(tree,varbounds_left.lower_bounds,varbounds_left.upper_bounds)
-        #apply orbital fixing
-        S_left  = apply_orbital_fixing!(varbounds_left,  n_vertices)
-        if isempty(S_left)
-            fixed_new_variables = false
-        end
+        prop_info_left = apply_propagation_routine!(tree, varbounds_left.lower_bounds, varbounds_left.upper_bounds)
+        S_left = fixing_fn === nothing ? Int[] :
+                 apply_orbital_fixing!(varbounds_left, fixing_fn)
+        fixed_new_variables = !isempty(S_left) || !isempty(prop_info_left)
     end
 
-    #right loop
+    # right loop
     fixed_new_variables = true
     while fixed_new_variables
-        #apply user provided propagation routine
-        prop_info_right = apply_propagation_routine!(tree,varbounds_right.lower_bounds,varbounds_right.upper_bounds)
-        #apply orbital fixing
-        S_right  = apply_orbital_fixing!(varbounds_right,  n_vertices)
-        if isempty(S_right)
-            fixed_new_variables = false
-        end
+        prop_info_right = apply_propagation_routine!(tree, varbounds_right.lower_bounds, varbounds_right.upper_bounds)
+        S_right = fixing_fn === nothing ? Int[] :
+                  apply_orbital_fixing!(varbounds_right, fixing_fn)
+        fixed_new_variables = !isempty(S_right) || !isempty(prop_info_right)
     end
 
     #pseudocost branching info

@@ -590,46 +590,27 @@ are fixed to zero.
 
 Mutates `varbounds` in place and returns the set `S` of newly-fixed indices.
 """
-function apply_orbital_fixing!(varbounds::IntegerBounds, n_vertices::Int)
-    n_edges = n_vertices * (n_vertices - 1) ÷ 2
-    f1 = falses(n_edges)
-    f0 = falses(n_edges)
-    for (e, v) in varbounds.lower_bounds
-        if v >= 1.0
-            @inbounds f1[e] = true
-        end
-    end
-    for (e, v) in varbounds.upper_bounds
-        if v <= 0.0
-            @inbounds f0[e] = true
-        end
-    end
-    lb_color = zeros(Int, n_edges)
-    @inbounds for e in 1:n_edges
-        lb_color[e] = f1[e] ? 1 : 0
-    end
-    orbits = compute_unassigned_orbits(n_vertices, lb_color, ones(Int, n_edges))
-    #collect fixings
+function apply_orbital_fixing!(varbounds::IntegerBounds, orbits_fn::Function)
+    orbits = orbits_fn(varbounds)
+
+    is_f0(e) = haskey(varbounds.upper_bounds, e) && varbounds.upper_bounds[e] <= 0.0
+    is_f1(e) = haskey(varbounds.lower_bounds, e) && varbounds.lower_bounds[e] >= 1.0
+
     S = Int[]
     for orbit in orbits
-        touches_f0 = false
-        @inbounds for e in orbit
-            if f0[e]
-                touches_f0 = true
-                break
-            end
-        end
-        touches_f0 || continue
-        @inbounds for e in orbit
-            if !f0[e] && !f1[e]
+        any(is_f0, orbit) || continue
+        for e in orbit
+            if !is_f0(e) && !is_f1(e)
                 push!(S, e)
             end
         end
     end
+
     for e in S
-        delete!(varbounds.lower_bounds, e)
+        delete!(varbounds.lower_bounds, e)   # no-op if absent
         varbounds.upper_bounds[e] = 0.0
     end
+
     return S
 end
 
