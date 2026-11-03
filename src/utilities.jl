@@ -592,39 +592,44 @@ Mutates `varbounds` in place and returns the set `S` of newly-fixed indices.
 """
 function apply_orbital_fixing!(varbounds::IntegerBounds, n_vertices::Int)
     n_edges = n_vertices * (n_vertices - 1) ÷ 2
-
-    lb = zeros(Int, n_edges)
-    ub = ones(Int,  n_edges)
-    for (i, v) in varbounds.lower_bounds
-        lb[i] = Int(round(v))
+    f1 = falses(n_edges)
+    f0 = falses(n_edges)
+    for (e, v) in varbounds.lower_bounds
+        if v >= 1.0
+            @inbounds f1[e] = true
+        end
     end
-    for (i, v) in varbounds.upper_bounds
-        ub[i] = Int(round(v))
+    for (e, v) in varbounds.upper_bounds
+        if v <= 0.0
+            @inbounds f0[e] = true
+        end
     end
-
-    # Orbits of G(A(F_1, ∅)): pretend F_0 is empty for the symmetry computation.
-    ones_ub = ones(Int, n_edges)
-    orbits_fn = get(tree.root.options, :orbital_orbits, nothing)
-    orbits = orbits_fn(tree, node)
-
+    lb_color = zeros(Int, n_edges)
+    @inbounds for e in 1:n_edges
+        lb_color[e] = f1[e] ? 1 : 0
+    end
+    orbits = compute_unassigned_orbits(n_vertices, lb_color, ones(Int, n_edges))
+    #collect fixings
     S = Int[]
     for orbit in orbits
-        if any(e -> ub[e] == 0, orbit)          # orbit intersects F_0
-            for e in orbit
-                if ub[e] != 0                    # e is still free in this child
-                    push!(S, e)
-                end
+        touches_f0 = false
+        @inbounds for e in orbit
+            if f0[e]
+                touches_f0 = true
+                break
+            end
+        end
+        touches_f0 || continue
+        @inbounds for e in orbit
+            if !f0[e] && !f1[e]
+                push!(S, e)
             end
         end
     end
-
     for e in S
-        if haskey(varbounds.lower_bounds, e)
-            delete!(varbounds.lower_bounds, e)
-        end
+        delete!(varbounds.lower_bounds, e)
         varbounds.upper_bounds[e] = 0.0
     end
-
     return S
 end
 
