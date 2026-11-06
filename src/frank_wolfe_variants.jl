@@ -11,6 +11,7 @@ workspace structure that is passed as last argument to `solve_frank_wolfe`.
 """
 abstract type FrankWolfeVariant end
 abstract type DecompositionInvariant <: FrankWolfeVariant end
+abstract type SimpleFrankWolfe <: FrankWolfeVariant end
 
 # default printing for FrankWolfeVariant is just showing the type
 Base.print(io::IO, fw::FrankWolfeVariant) = print(io, split(string(typeof(fw)), ".")[end])
@@ -467,3 +468,74 @@ function solve_frank_wolfe(
 end
 
 Base.print(io::IO, ::StandardFrankWolfe) = print(io, "StandardFrank-Wolfe")
+
+"""
+	Stochastic Frank Wolfe
+
+Stochastic Frank Wolfe uses a stochastic gradient oracle for Frank-Wolfe iterations where full gradient evaluation is expensive.
+
+After each run of stochastic Frank-Wolfe a full gradient evaluation is used to get a dual bound that verifies convergence.
+
+If the desired gap has not been reached then stochastic Frank-Wolfe is restarted from the returned point. 
+
+"""
+
+struct StochasticFrankWolfe <: SimpleFrankWolfe
+	dimension::Int
+	objective::FrankWolfe.AbstractStochasticObjective
+	batch_size::Int
+end
+
+function solve_frank_wolfe(
+    fw::StochasticFrankWolfe,
+    f,
+    grad!,
+    lmo,
+    active_set;
+    line_search::FrankWolfe.LineSearchMethod = FrankWolfe.Nonconvex(),
+    epsilon = 1e-7,
+    max_iteration = 100000,
+    add_dropped_vertices = false,
+    use_extra_vertex_storage = false,
+    extra_vertex_storage = nothing,
+    callback = nothing,
+    lazy = false,
+    lazy_tolerance = 2.0,
+    timeout = Inf,
+    verbose = false,
+    workspace = nothing,
+    kwargs...,
+)
+    x0 = FrankWolfe.compute_extreme_point(lmo, rand(fw.dimension))
+
+    x, _, primal_stoch, dual_gap_stoch, status, _ =
+        FrankWolfe.stochastic_frank_wolfe(
+            fw.objective,
+            lmo,
+            x0;
+            max_iteration = max_iteration,
+            batch_size = fw.batch_size,
+            verbose = verbose,
+            use_full_evaluation = true,
+            line_search = line_search,
+            epsilon = epsilon,
+            print_iter = 1000,
+            trajectory = false,
+            rng = Random.GLOBAL_RNG,
+            batch_iterator = nothing,
+            callback = callback,
+            timeout = timeout,
+        )
+
+    # deterministic Boscia objective, not tree.root.problem.f
+    primal = f(x)
+    #scale = primal_stoch > 0 ? primal / primal_stoch : 1.0
+    #dual_gap = dual_gap_stoch * scale
+    g_full = similar(x)
+    grad!(g_full, x)
+    v_full = FrankWolfe.compute_extreme_point(lmo, g_full)
+    dual_gap = max(0.0, dot(g_full, x) - dot(g_full, v_full))
+    return x, primal, dual_gap, status, nothing
+end
+    
+Base.print(io::IO, ::StochasticFrankWolfe) = print(io, "Stochastic-FrankWolfe")
