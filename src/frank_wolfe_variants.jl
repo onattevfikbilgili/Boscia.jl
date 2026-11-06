@@ -494,7 +494,7 @@ function solve_frank_wolfe(
     active_set;
     line_search::FrankWolfe.LineSearchMethod = FrankWolfe.Nonconvex(),
     epsilon = 1e-7,
-    max_iteration = 100000,
+    max_iteration = 10000,
     add_dropped_vertices = false,
     use_extra_vertex_storage = false,
     extra_vertex_storage = nothing,
@@ -529,12 +529,9 @@ function solve_frank_wolfe(
 
     # deterministic Boscia objective, not tree.root.problem.f
     primal = f(x)
-    #scale = primal_stoch > 0 ? primal / primal_stoch : 1.0
-    #dual_gap = dual_gap_stoch * scale
-    g_full = similar(x)
-    grad!(g_full, x)
-    v_full = FrankWolfe.compute_extreme_point(lmo, g_full)
-    dual_gap = max(0.0, dot(g_full, x) - dot(g_full, v_full))
+    scale = primal_stoch > 0 ? primal / primal_stoch : 1.0
+    dual_gap = dual_gap_stoch * scale
+
     return x, primal, dual_gap, status, nothing
 end
     
