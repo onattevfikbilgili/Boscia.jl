@@ -531,6 +531,11 @@ function solve_frank_wolfe(
     primal = f(x)
     scale = primal_stoch > 0 ? primal / primal_stoch : 1.0
     dual_gap = dual_gap_stoch * scale
+    
+    # use 50 steps of BPCG if
+    if(dual_gap < epsilon)
+    	x, _, primal, dual_gap, status, _, _ = FrankWolfe.blended_pairwise_conditional_gradient(f, grad!, lmo, x0, max_iteration=50, line_search=FrankWolfe.Secant(), verbose=verbose, trajectory=false);
+	end
 
     return x, primal, dual_gap, status, nothing
 end
