@@ -301,57 +301,56 @@ function get_branching_nodes_info(tree::BnBTree, node::FrankWolfeNode, vidx::Int
         false, false
     end
 
-    #different ways to split active set
-    if !(typeof(tree.root.options[:variant]) <: DecompositionInvariant)
-
-        # Keep the same pre_computed_set
-        pre_computed_set_left, pre_computed_set_right = node.pre_computed_set, node.pre_computed_set
-
-        # Split active set
-        active_set_left, active_set_right =
-            split_vertices_set!(node.active_set, tree, vidx, node.local_bounds)
+   #different ways to split active set if the FW variant is not simple or decomposition invariant
+   	if !(typeof(tree.root.options[:variant]) <: DecompositionInvariant || typeof(tree.root.options[:variant]) <: SimpleFrankWolfe)
+       	# Keep the same pre_computed_set
+       	pre_computed_set_left, pre_computed_set_right = node.pre_computed_set, node.pre_computed_set
+       	# Split active set
+       	active_set_left, active_set_right =
+        	split_vertices_set!(node.active_set, tree, vidx, node.local_bounds)
     else
-        if node.pre_computed_set !== nothing
-            # Split pre_computed_set
-            pre_computed_set_left, pre_computed_set_right =
-                split_pre_computed_set!(x, node.pre_computed_set, tree, vidx, node.local_bounds)
-        else
-            pre_computed_set_left, pre_computed_set_right =
-                node.pre_computed_set, node.pre_computed_set
-        end
-        active_set_left, active_set_right = node.active_set, node.active_set
+    	if node.pre_computed_set !== nothing
+    	    # Split pre_computed_set
+    	    pre_computed_set_left, pre_computed_set_right =
+    	        split_pre_computed_set!(x, node.pre_computed_set, tree, vidx, node.local_bounds)
+    	else
+    	    pre_computed_set_left, pre_computed_set_right =
+    	        node.pre_computed_set, node.pre_computed_set
+    	end
+    	active_set_left, active_set_right = node.active_set, node.active_set
     end
+
 
     discarded_set_left, discarded_set_right =
-        split_vertices_set!(node.discarded_vertices, tree, vidx, x, node.local_bounds)
+   	    split_vertices_set!(node.discarded_vertices, tree, vidx, x, node.local_bounds)
 
-    if !(typeof(tree.root.options[:variant]) <: DecompositionInvariant)
-        # Sanity check
-        @assert isapprox(sum(active_set_left.weights), 1.0) "sum weights left: $(sum(active_set_left.weights))"
-        @assert sum(active_set_left.weights .< 0) == 0
-        for v in active_set_left.atoms
-            if !(v[vidx] <= floor(x[vidx]) + tree.options.atol)
-                error("active_set_left\n$(v)\n$vidx, $(x[vidx]), $(v[vidx])")
-            end
-        end
-        @assert isapprox(sum(active_set_right.weights), 1.0) "sum weights right: $(sum(active_set_right.weights))"
-        @assert sum(active_set_right.weights .< 0) == 0
-        for v in active_set_right.atoms
-            if !(v[vidx] >= ceil(x[vidx]) - tree.options.atol)
-                error("active_set_right\n$(v)\n$vidx, $(x[vidx]), $(v[vidx])")
-            end
-        end
-        for v in discarded_set_left.storage
-            if !(v[vidx] <= floor(x[vidx]) + tree.options.atol)
-                error("storage left\n$(v)\n$vidx, $(x[vidx]), $(v[vidx])")
-            end
-        end
-        for v in discarded_set_right.storage
-            if !(v[vidx] >= ceil(x[vidx]) - tree.options.atol)
-                error("storage right\n$(v)\n$vidx, $(x[vidx]), $(v[vidx])")
-            end
-        end
-    end
+   	if !(typeof(tree.root.options[:variant]) <: DecompositionInvariant || typeof(tree.root.options[:variant]) <: SimpleFrankWolfe)
+   	    # Sanity check
+   	    @assert isapprox(sum(active_set_left.weights), 1.0) "sum weights left: $(sum(active_set_left.weights))"
+   	    @assert sum(active_set_left.weights .< 0) == 0
+   	    for v in active_set_left.atoms
+   	        if !(v[vidx] <= floor(x[vidx]) + tree.options.atol)
+   	            error("active_set_left\n$(v)\n$vidx, $(x[vidx]), $(v[vidx])")
+   	        end
+   	    end
+   	    @assert isapprox(sum(active_set_right.weights), 1.0) "sum weights right: $(sum(active_set_right.weights))"
+   	    @assert sum(active_set_right.weights .< 0) == 0
+   	    for v in active_set_right.atoms
+   	        if !(v[vidx] >= ceil(x[vidx]) - tree.options.atol)
+   	            error("active_set_right\n$(v)\n$vidx, $(x[vidx]), $(v[vidx])")
+   	        end
+   	    end
+   	    for v in discarded_set_left.storage
+   	        if !(v[vidx] <= floor(x[vidx]) + tree.options.atol)
+   	            error("storage left\n$(v)\n$vidx, $(x[vidx]), $(v[vidx])")
+   	        end
+   	    end
+   	    for v in discarded_set_right.storage
+   	        if !(v[vidx] >= ceil(x[vidx]) - tree.options.atol)
+   	            error("storage right\n$(v)\n$vidx, $(x[vidx]), $(v[vidx])")
+   	        end
+   	    end
+   	end
 
     # add new bounds to the feasible region left and right
     # copy bounds from parent
@@ -371,7 +370,7 @@ function get_branching_nodes_info(tree::BnBTree, node::FrankWolfeNode, vidx::Int
     fw_dual_gap_limit = tree.root.options[:dual_gap_decay_factor] * node.fw_dual_gap_limit
     fw_dual_gap_limit = max(fw_dual_gap_limit, tree.root.options[:min_node_fw_epsilon])
 
-    if !(typeof(tree.root.options[:variant]) <: DecompositionInvariant)
+    if !(typeof(tree.root.options[:variant]) <: DecompositionInvariant || typeof(tree.root.options[:variant]) <: SimpleFrankWolfe)
         # in case of non trivial domain oracle: Only split if the iterate is still domain feasible
         x_left = FrankWolfe.compute_active_set_iterate!(active_set_left)
         x_right = FrankWolfe.compute_active_set_iterate!(active_set_right)
@@ -496,31 +495,37 @@ function evaluate_node!(tree::BnBTree, node::FrankWolfeNode)
     end
 
     decomposition_invariant_starting_point = nothing
-    if !(typeof(tree.root.options[:variant]) <: DecompositionInvariant)
-        # Check feasibility of the iterate
-        active_set = node.active_set
-        x = FrankWolfe.compute_active_set_iterate!(node.active_set)
-        @assert is_linear_feasible(tree.root.problem.tlmo, x)
-        for (_, v) in node.active_set
-            @assert is_linear_feasible(tree.root.problem.tlmo, v)
-        end
-    else
-        if node.id == 1 && tree.root.options[:start_solution] !== nothing
-            decomposition_invariant_starting_point = tree.root.options[:start_solution]
+    if !(typeof(tree.root.options[:variant]) <: SimpleFrankWolfe)
+	    if !(typeof(tree.root.options[:variant]) <: DecompositionInvariant)
+	        # Check feasibility of the iterate
+	        active_set = node.active_set
+	        x = FrankWolfe.compute_active_set_iterate!(node.active_set)
+	        @assert is_linear_feasible(tree.root.problem.tlmo, x)
+	        for (_, v) in node.active_set
+	            @assert is_linear_feasible(tree.root.problem.tlmo, v)
+	        end
+	    else
+	        if node.id == 1 && tree.root.options[:start_solution] !== nothing
+	            decomposition_invariant_starting_point = tree.root.options[:start_solution]
         elseif tree.root.options[:find_domain_point] !== _trivial_domain_point
-            decomposition_invariant_starting_point =
-                tree.root.options[:find_domain_point](node.local_bounds)
-            if decomposition_invariant_starting_point === nothing
-                @debug "Node $(node.id) is infeasible: no domain-feasible starting point found."
-                return NaN, NaN
-            end
-        end
+	            decomposition_invariant_starting_point =
+	                tree.root.options[:find_domain_point](node.local_bounds)
+	            if decomposition_invariant_starting_point === nothing
+	                @debug "Node $(node.id) is infeasible: no domain-feasible starting point found."
+	                return NaN, NaN
+	            end
+	        end
+	    end
+    end
+
+    if tree.root.options[:propagate_bounds] !== nothing
+        tree.root.options[:propagate_bounds](tree, node)
     end
 
     # time tracking FW
     time_ref = Dates.now()
     domain_oracle = tree.root.options[:domain_oracle]
-
+    
     #construct the objective function and its gradient for the frank-wolfe iterations
     problem = tree.root.problem
     node_objective, node_gradient = problem.f, problem.g
@@ -556,22 +561,25 @@ function evaluate_node!(tree::BnBTree, node::FrankWolfeNode)
     if tree.root.options[:fw_verbose]
         @show fw_status
     end
-
-    if typeof(atoms_set).name.wrapper == FrankWolfe.ActiveSet
-        # update active set of the node
-        node.active_set = atoms_set
-    else
-        node.pre_computed_set = atoms_set
-        node.active_set = FrankWolfe.ActiveSet([(1.0, x)])
-        # update set of computed atoms and active set
-        if isa(x, AbstractVector)
-            node.pre_computed_set = atoms_set
-            node.active_set = FrankWolfe.ActiveSet([(1.0, x)])
-        else
-            @debug "x is not a vector, returning NaN, x: $x"
-            return NaN, NaN
-        end
-    end
+	
+    if atoms_set isa FrankWolfe.ActiveSet
+	    # Classical FW variants: the active set already reflects the current iterate.
+	    node.active_set = atoms_set
+	elseif atoms_set === nothing
+	    # SimpleFrankWolfe variants (incl. StochasticFrankWolfe):
+	    # they do not maintain an active set. Package the current iterate as a
+	    # degenerate active set so get_relaxed_values / branching see the correct
+	    # point. This active set is *never* passed back into the FW variant.
+	    node.active_set = FrankWolfe.ActiveSet([(1.0, x)])
+	else
+	    # DecompositionInvariant variants: atoms_set is the pre_computed_set.
+	    if !isa(x, AbstractVector)
+	        @debug "x is not a vector, returning NaN, x: $x"
+	        return NaN, NaN
+	    end
+	    node.pre_computed_set = atoms_set
+	    node.active_set = FrankWolfe.ActiveSet([(1.0, x)])
+	end
 
     node.fw_time = Dates.now() - time_ref
     node.dual_gap = dual_gap
@@ -671,7 +679,7 @@ function get_orbital_branching_nodes_info(
     end
 
     # ---- variant-dependent active set handling ----
-    is_di = typeof(tree.root.options[:variant]) <: DecompositionInvariant
+    is_di = typeof(tree.root.options[:variant]) <: DecompositionInvariant || typeof(tree.root.options[:variant]) <: SimpleFrankWolfe
 
     if is_di
         # DI: do not split the active set; do not touch pre_computed_set either.
@@ -820,7 +828,7 @@ function get_propagating_nodes_info(tree::BnBTree, node::FrankWolfeNode, vidx::I
     end
 
     #Active set filtering if FW variant is not decomposition invariant
-    is_di = typeof(tree.root.options[:variant]) <: DecompositionInvariant
+    is_di = typeof(tree.root.options[:variant]) <: DecompositionInvariant || typeof(tree.root.options[:variant]) <: SimpleFrankWolfe
 
     if is_di
         # DI: do not split the active set; do not touch pre_computed_set either.
@@ -969,7 +977,7 @@ function get_orbital_propagating_nodes_info(tree::BnBTree, node::FrankWolfeNode,
     end
 
     #Active set filtering if FW variant is not decomposition invariant
-    is_di = typeof(tree.root.options[:variant]) <: DecompositionInvariant
+    is_di = typeof(tree.root.options[:variant]) <: DecompositionInvariant || typeof(tree.root.options[:variant]) <: SimpleFrankWolfe
 
     if is_di
         # DI: do not split the active set; do not touch pre_computed_set either.

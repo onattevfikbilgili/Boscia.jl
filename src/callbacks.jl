@@ -19,7 +19,8 @@ function build_FW_callback(
     vars = get_variables_pointers(tree.root.problem.tlmo.lmo, tree)
     # variable to only fetch heuristics when the counter increases
     ncalls = -1
-    if !use_DICG
+    #if !(use_DICG || typeof(tree.root.options[:variant]) <: SimpleFrankWolfe)
+    if !(use_DICG)
         return function (state, active_set, kwargs...)
             return process_FW_callback_logic(
                 tree,
@@ -37,23 +38,23 @@ function build_FW_callback(
             )
         end
     else
-        return function (state, pre_computed_set, kwargs...)
-            return process_FW_callback_logic(
-                tree,
-                state,
-                vars,
-                fw_iterations,
-                ncalls,
-                min_fw_iterations,
-                min_number_lower,
-                time_ref,
-                time_limit,
-                use_DICG;
-                pre_computed_set=pre_computed_set,
-                kwargs,
-            )
-        end
-    end
+	    return function (state, second_arg, kwargs...)
+	        return process_FW_callback_logic(
+	            tree,
+	            state,
+	            vars,
+	            fw_iterations,
+	            ncalls,
+	            min_fw_iterations,
+	            min_number_lower,
+	            time_ref,
+	            time_limit,
+	            use_DICG;
+	            pre_computed_set=pre_computed_set,
+	            kwargs,
+	        )
+	    end
+	end
 end
 
 function process_FW_callback_logic(
@@ -72,7 +73,7 @@ function process_FW_callback_logic(
     kwargs...,
 )
 
-    if !use_DICG
+    if !(use_DICG || typeof(tree.root.options[:variant]) <: SimpleFrankWolfe)
         @assert isapprox(sum(active_set.weights), 1.0, atol=1e-10) "sum(active_set.weights) = $(sum(active_set.weights))"
         @assert sum(active_set.weights .< 0) == 0
     end
@@ -146,16 +147,18 @@ function process_FW_callback_logic(
     end
 
     # push FW vertex into pre_computed_set for DICG
-    if pre_computed_set != nothing
-        if state.step_type != FrankWolfe.last || state.step_type != FrankWolfe.pp
-            idx = findfirst(x -> x == state.v, pre_computed_set)
-            if idx == nothing
-                if length(pre_computed_set) > (length(state.v) + 1)
-                    deleteat!(pre_computed_set, 1)
-                end
-                push!(pre_computed_set, state.v)
-            end
-        end
+    if !(typeof(tree.root.options[:variant]) <: SimpleFrankWolfe)
+	    if pre_computed_set != nothing
+	        if state.step_type != FrankWolfe.last || state.step_type != FrankWolfe.pp
+	            idx = findfirst(x -> x == state.v, pre_computed_set)
+	            if idx == nothing
+	                if length(pre_computed_set) > (length(state.v) + 1)
+	                    deleteat!(pre_computed_set, 1)
+	                end
+	                push!(pre_computed_set, state.v)
+	            end
+	        end
+	    end
     end
 
     return true
