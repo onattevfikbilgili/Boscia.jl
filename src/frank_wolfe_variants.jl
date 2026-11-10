@@ -559,7 +559,7 @@ function solve_frank_wolfe(
     
     # use 50 steps of BPCG if
     if(dual_gap < epsilon && fw.use_BPCG)
-    	x, _, primal, dual_gap, status, _, _ = FrankWolfe.blended_pairwise_conditional_gradient(f, grad!, lmo, x0, max_iteration=fw.BPCG_max_iter, line_search=fw.BPCG_line_search, verbose=verbose, trajectory=false);
+    	x, _, primal, dual_gap, status, _, _ = FrankWolfe.blended_pairwise_conditional_gradient(f, grad!, lmo, x, max_iteration=fw.BPCG_max_iter, line_search=fw.BPCG_line_search, verbose=verbose, trajectory=false);
 	end
 
     return x, primal, dual_gap, status, nothing
