@@ -476,7 +476,7 @@ Stochastic Frank Wolfe uses a stochastic gradient oracle for Frank-Wolfe iterati
 
 After each run of stochastic Frank-Wolfe a full gradient evaluation is used to get a dual bound that verifies convergence.
 
-If the desired gap has not been reached then stochastic Frank-Wolfe is restarted from the returned point. 
+If the desired gap has not been reached then blended pairwise Frank-Wolfe is used starting from the position provided by stochastic frank wolfe. 
 
 """
 
@@ -484,6 +484,30 @@ struct StochasticFrankWolfe <: SimpleFrankWolfe
 	dimension::Int
 	objective::FrankWolfe.AbstractStochasticObjective
 	batch_size::Int
+	use_BPCG::Bool
+	BPCG_line_search::FrankWolfe.LineSearchMethod
+	BPCG_max_iter::Int
+	BPCG_verbose::Bool
+end
+
+function StochasticFrankWolfe(
+    dimension::Int,
+    objective::FrankWolfe.AbstractStochasticObjective,
+    batch_size::Int;
+    use_BPCG::Bool = true,
+    BPCG_line_search::FrankWolfe.LineSearchMethod = FrankWolfe.Secant(),
+    BPCG_max_iter::Int = 50,
+    BPCG_verbose::Bool = false,
+)
+    return StochasticFrankWolfe(
+        dimension,
+        objective,
+        batch_size,
+        use_BPCG,
+        BPCG_line_search,
+        BPCG_max_iter,
+        BPCG_verbose,
+    )
 end
 
 function solve_frank_wolfe(
@@ -533,8 +557,8 @@ function solve_frank_wolfe(
     dual_gap = dual_gap_stoch * scale
     
     # use 50 steps of BPCG if
-    if(dual_gap < epsilon)
-    	x, _, primal, dual_gap, status, _, _ = FrankWolfe.blended_pairwise_conditional_gradient(f, grad!, lmo, x0, max_iteration=50, line_search=FrankWolfe.Secant(), verbose=verbose, trajectory=false);
+    if(dual_gap < epsilon && fw.use_BPCG)
+    	x, _, primal, dual_gap, status, _, _ = FrankWolfe.blended_pairwise_conditional_gradient(f, grad!, lmo, x0, max_iteration=fw.BPCG_max_iter, line_search=fw.BPCG_line_search, verbose=verbose, trajectory=false);
 	end
 
     return x, primal, dual_gap, status, nothing
