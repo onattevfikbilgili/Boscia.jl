@@ -38,7 +38,7 @@ function build_FW_callback(
             )
         end
     else
-	    return function (state, second_arg, kwargs...)
+	    return function (state, pre_computed_set, kwargs...)
 	        return process_FW_callback_logic(
 	            tree,
 	            state,
