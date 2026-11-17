@@ -916,6 +916,8 @@ end
 
 function get_orbital_propagating_nodes_info(tree::BnBTree, node::FrankWolfeNode, vidx::Int, orbits_fn)
     #compute current orbits as well as the orbit containining the branching variable
+    fixed_extra_left = 0
+    fixed_extra_right = 0
     orbits = orbits_fn(tree, node)
     isempty(orbits) && return
     O = nothing
@@ -939,8 +941,10 @@ function get_orbital_propagating_nodes_info(tree::BnBTree, node::FrankWolfeNode,
 	push!(varbounds_right.lower_bounds, (vidx => ceil(x[vidx])))
     for o in O
         push!(varbounds_left.upper_bounds,  (o => floor(x[o])))
+        fixed_extra_left += 1
     end
-
+    fixed_extra_left -= 1
+	
     #enter constraint propagation / orbital fixing for loop
     #create seperate loops for left and right child nodes
     #first apply the user provided propagation routine, then apply orbital fixings
@@ -953,6 +957,7 @@ function get_orbital_propagating_nodes_info(tree::BnBTree, node::FrankWolfeNode,
         prop_info_left = apply_propagation_routine!(tree, varbounds_left.lower_bounds, varbounds_left.upper_bounds)
         S_left = fixing_fn === nothing ? Int[] :
                  apply_orbital_fixing!(varbounds_left, fixing_fn)
+        fixed_extra_left += length(prop_info_left) + length(S_left)
         fixed_new_variables = !isempty(S_left) || !isempty(prop_info_left)
     end
 
@@ -962,6 +967,7 @@ function get_orbital_propagating_nodes_info(tree::BnBTree, node::FrankWolfeNode,
         prop_info_right = apply_propagation_routine!(tree, varbounds_right.lower_bounds, varbounds_right.upper_bounds)
         S_right = fixing_fn === nothing ? Int[] :
                   apply_orbital_fixing!(varbounds_right, fixing_fn)
+        fixed_extra_right += length(prop_info_right) + length(S_right)
         fixed_new_variables = !isempty(S_right) || !isempty(prop_info_right)
     end
 
@@ -1003,7 +1009,8 @@ function get_orbital_propagating_nodes_info(tree::BnBTree, node::FrankWolfeNode,
     end
     
     fw_dual_gap_limit = max(tree.root.options[:dual_gap_decay_factor] * node.fw_dual_gap_limit, tree.root.options[:min_node_fw_epsilon])
-
+	println("Number of additional left fixings: ", fixed_extra_left)
+	println("Number of additional right fixings: ", fixed_extra_right)
     #node info
     info_left = (
         active_set=active_set_left,
