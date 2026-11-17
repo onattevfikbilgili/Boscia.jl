@@ -916,8 +916,8 @@ end
 
 function get_orbital_propagating_nodes_info(tree::BnBTree, node::FrankWolfeNode, vidx::Int, orbits_fn)
     #compute current orbits as well as the orbit containining the branching variable
-    fixed_extra_left = 0
-    fixed_extra_right = 0
+    #fixed_extra_left = 0
+    #fixed_extra_right = 0
     orbits = orbits_fn(tree, node)
     isempty(orbits) && return
     O = nothing
@@ -1009,8 +1009,8 @@ function get_orbital_propagating_nodes_info(tree::BnBTree, node::FrankWolfeNode,
     end
     
     fw_dual_gap_limit = max(tree.root.options[:dual_gap_decay_factor] * node.fw_dual_gap_limit, tree.root.options[:min_node_fw_epsilon])
-	println("Number of additional left fixings: ", fixed_extra_left)
-	println("Number of additional right fixings: ", fixed_extra_right)
+	#println("Number of additional left fixings: ", fixed_extra_left)
+	#println("Number of additional right fixings: ", fixed_extra_right)
     #node info
     info_left = (
         active_set=active_set_left,
