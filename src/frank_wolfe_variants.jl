@@ -533,7 +533,7 @@ function solve_frank_wolfe(
 )
     x0 = FrankWolfe.compute_extreme_point(lmo, rand(fw.dimension))
 
-    x, _, primal_stoch, dual_gap, status, _ =
+    x, _, primal_stoch, dual_gap_stoch, status, _ =
         FrankWolfe.stochastic_frank_wolfe(
             fw.objective,
             lmo,
@@ -554,8 +554,8 @@ function solve_frank_wolfe(
 
     # deterministic Boscia objective, not tree.root.problem.f
     primal = f(x)
-    #scale = primal_stoch > 0 ? primal / primal_stoch : 1.0
-    #dual_gap = dual_gap_stoch * scale
+    scale = primal_stoch > 0 ? primal / primal_stoch : 1.0
+    dual_gap = dual_gap_stoch * scale
     
     # use 50 steps of BPCG if
     if(dual_gap < epsilon && fw.use_BPCG)
