@@ -533,7 +533,7 @@ function solve_frank_wolfe(
 )
     x0 = FrankWolfe.compute_extreme_point(lmo, rand(fw.dimension))
 
-    x, _, primal_stoch, dual_gap_stoch, status, _ =
+    x, _, primal_stoch, dual_gap, status, _ =
         FrankWolfe.stochastic_frank_wolfe(
             fw.objective,
             lmo,
