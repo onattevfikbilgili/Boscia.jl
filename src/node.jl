@@ -655,7 +655,11 @@ function get_orbital_branching_nodes_info(
 )
     is_valid_split(tree, rep) ||
         error("Orbital branching: representative $rep was already branched on!")
-
+    
+    #compute current orbits as well as the orbit containining the branching variable
+    #fixed_extra_left = 0
+    #fixed_extra_right = length(orbit)
+    
     x = get_relaxed_values(tree, node)
     primal = tree.root.problem.f(x)
     lower_bound_base = primal - node.dual_gap
@@ -730,6 +734,8 @@ function get_orbital_branching_nodes_info(
         S_right = apply_orbital_fixing!(varbounds_right, fixing_fn)
         isempty(S_left)  || @debug "Orbital fixing (left)  fixed $(length(S_left)) vars:  $S_left"
         isempty(S_right) || @debug "Orbital fixing (right) fixed $(length(S_right)) vars: $S_right"
+        #fixed_extra_right += length(S_left)
+        #fixed_extra_right += length(S_left)
     end
     fw_dual_gap_limit = max(
         tree.root.options[:dual_gap_decay_factor] * node.fw_dual_gap_limit,
@@ -854,6 +860,8 @@ function get_propagating_nodes_info(tree::BnBTree, node::FrankWolfeNode, vidx::I
     end
     
     fw_dual_gap_limit = max(tree.root.options[:dual_gap_decay_factor] * node.fw_dual_gap_limit, tree.root.options[:min_node_fw_epsilon])
+    #println("Number of additional left fixings: ", fixed_extra_left)
+	#println("Number of additional right fixings: ", fixed_extra_right)
 
     #node info
     info_left = (
