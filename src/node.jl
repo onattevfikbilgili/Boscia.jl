@@ -933,7 +933,9 @@ function get_orbital_propagating_nodes_info(tree::BnBTree, node::FrankWolfeNode,
         end
     end
     O === nothing && return
-
+    #extra_fixings_left = 0
+    #extra_fixings_right = 0
+    
     # get iterate, primal and lower bound
     x = get_relaxed_values(tree, node)
     primal = tree.root.problem.f(x)
@@ -947,6 +949,7 @@ function get_orbital_propagating_nodes_info(tree::BnBTree, node::FrankWolfeNode,
     for o in O
         push!(varbounds_left.upper_bounds,  (o => floor(x[o])))
     end
+    #extra_fixings_left += length(O) - 1
 	
     #enter constraint propagation / orbital fixing for loop
     #create seperate loops for left and right child nodes
@@ -961,6 +964,7 @@ function get_orbital_propagating_nodes_info(tree::BnBTree, node::FrankWolfeNode,
         S_left = fixing_fn === nothing ? Int[] :
                  apply_orbital_fixing!(varbounds_left, fixing_fn)
         fixed_new_variables = !isempty(S_left) || !isempty(prop_info_left)
+        #extra_fixings_left += length(prop_info_left) + length(S_left)
     end
 
     # right loop
@@ -970,6 +974,7 @@ function get_orbital_propagating_nodes_info(tree::BnBTree, node::FrankWolfeNode,
         S_right = fixing_fn === nothing ? Int[] :
                   apply_orbital_fixing!(varbounds_right, fixing_fn)
         fixed_new_variables = !isempty(S_right) || !isempty(prop_info_right)
+        #extra_fixings_right += length(prop_info_right) + length(S_right)
     end
 
     #pseudocost branching info
@@ -1010,6 +1015,9 @@ function get_orbital_propagating_nodes_info(tree::BnBTree, node::FrankWolfeNode,
     end
     
     fw_dual_gap_limit = max(tree.root.options[:dual_gap_decay_factor] * node.fw_dual_gap_limit, tree.root.options[:min_node_fw_epsilon])
+    
+    #println("Extra fixings left = ", extra_fixings_left)
+    #println("Extra fixings right = ", extra_fixings_right)
 
     #node info
     info_left = (
