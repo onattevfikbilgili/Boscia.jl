@@ -733,7 +733,7 @@ function get_orbital_branching_nodes_info(
         isempty(S_left)  || @debug "Orbital fixing (left)  fixed $(length(S_left)) vars:  $S_left"
         isempty(S_right) || @debug "Orbital fixing (right) fixed $(length(S_right)) vars: $S_right"
         #extra_fixings_left += length(S_left)
-    	#extra fixings_right += length(S_right)
+    	#extra_fixings_right += length(S_right)
     end
     fw_dual_gap_limit = max(
         tree.root.options[:dual_gap_decay_factor] * node.fw_dual_gap_limit,
