@@ -655,7 +655,8 @@ function get_orbital_branching_nodes_info(
 )
     is_valid_split(tree, rep) ||
         error("Orbital branching: representative $rep was already branched on!")
-    
+    #extra_fixings_left = 0
+    #extra fixings_right = 0
     x = get_relaxed_values(tree, node)
     primal = tree.root.problem.f(x)
     lower_bound_base = primal - node.dual_gap
@@ -666,6 +667,7 @@ function get_orbital_branching_nodes_info(
     left_upper  = Dict{Int,Float64}()
     right_lower = Dict{Int,Float64}()
     right_upper = Dict(i => 0.0 for i in orbit)
+    #extra_fixings_right += length(orbit) - 1
 
     # ---- pseudocost bookkeeping ----
     left_distance  = x[rep] - floor(x[rep])
@@ -730,11 +732,15 @@ function get_orbital_branching_nodes_info(
         S_right = apply_orbital_fixing!(varbounds_right, fixing_fn)
         isempty(S_left)  || @debug "Orbital fixing (left)  fixed $(length(S_left)) vars:  $S_left"
         isempty(S_right) || @debug "Orbital fixing (right) fixed $(length(S_right)) vars: $S_right"
+        #extra_fixings_left += length(S_left)
+    	#extra fixings_right += length(S_right)
     end
     fw_dual_gap_limit = max(
         tree.root.options[:dual_gap_decay_factor] * node.fw_dual_gap_limit,
         tree.root.options[:min_node_fw_epsilon],
     )
+    #println("Extra fixings left = ", extra_fixings_left)
+    #println(" Extra fixings right = ", extra_fixings_right)
 
     # ---- node info ----
     info_left = (
