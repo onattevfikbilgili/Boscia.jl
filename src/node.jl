@@ -656,7 +656,7 @@ function get_orbital_branching_nodes_info(
     is_valid_split(tree, rep) ||
         error("Orbital branching: representative $rep was already branched on!")
     #extra_fixings_left = 0
-    #extra fixings_right = 0
+    #extra_fixings_right = 0
     x = get_relaxed_values(tree, node)
     primal = tree.root.problem.f(x)
     lower_bound_base = primal - node.dual_gap
