@@ -526,20 +526,18 @@ function evaluate_node!(tree::BnBTree, node::FrankWolfeNode)
     time_ref = Dates.now()
     domain_oracle = tree.root.options[:domain_oracle]
     
-    #construct the objective function and its gradient for the frank-wolfe iterations
-    problem = tree.root.problem
-    node_objective, node_gradient = problem.f, problem.g
+    # construct the objective function and its gradient for the frank-wolfe iterations
     # If an objective and gradient builder is specified by the user, use them to build node specific objective function instead of global problem objective and derivative
-    options = tree.root.options
-    builder = options[:objective_gradient_builder]
-    if !(builder === nothing)
-        node_objective, node_gradient = get_node_objective_gradient(tree, node)
+    # If no such builder is specified, the node specific objective and gradient stays the same as original problem objective and gradient
+    if !(tree.root.options[:objective_gradient_builder] === nothing)
+        tree.root.problem.node_specific_f , tree.root.problem.node_specific_g = get_node_objective_gradient(tree, node)
     end
+    # If an objective and gradient builder is specified by the user, use them to build node specific objective function instead of global problem objective and derivative
 
     x, primal, dual_gap, fw_status, atoms_set = solve_frank_wolfe(
         tree.root.options[:variant],
-        node_objective,
-        node_gradient,
+        tree.root.problem.node_specific_f,
+        tree.root.problem.node_specific_g,
         tree.root.problem.tlmo,
         node.active_set;
         epsilon=node.fw_dual_gap_limit,
@@ -557,6 +555,10 @@ function evaluate_node!(tree::BnBTree, node::FrankWolfeNode)
         domain_oracle=domain_oracle,
         decomposition_invariant_starting_point=decomposition_invariant_starting_point,
     )
+    
+    if !(tree.root.options[:objective_gradient_builder] === nothing)
+        tree.root.problem.node_specific_f , tree.root.problem.node_specific_g = tree.root.problem.f, tree.root.problem.g
+    end
 
     if tree.root.options[:fw_verbose]
         @show fw_status
@@ -740,7 +742,7 @@ function get_orbital_branching_nodes_info(
         tree.root.options[:min_node_fw_epsilon],
     )
     #println("Extra fixings left = ", extra_fixings_left)
-    #println(" Extra fixings right = ", extra_fixings_right)
+    #println("Extra fixings right = ", extra_fixings_right)
 
     # ---- node info ----
     info_left = (
